@@ -1,0 +1,20 @@
+"dest.dist","large.no","medium.no","small.no","all.no","all.pct","all.shortfall"
+"Restaurant or cafe within 400m",29,3,260,292,25.6816182937555,845
+"Bus within 400m, tram with 600m or train within 800m",245,96,594,935,82.2339489885664,202
+"Supermarket within 800m",255,86,169,510,44.8548812664908,627
+"Convenience store or supermarket within 400m",13,2,201,216,18.9973614775726,921
+"Butcher within 800m",41,9,31,81,7.12401055408971,1056
+"Bakery within 800m",77,29,77,183,16.0949868073879,954
+"Pharmacy within 800m",124,53,145,322,28.3201407211961,815
+"Post office within 800m",63,37,74,174,15.3034300791557,963
+"Local park within 400m",144,69,387,600,52.7704485488127,537
+"Community centre within 800m",21,9,58,88,7.73966578715919,1049
+"Childcare centre within 800m",248,114,542,904,79.5074758135444,233
+"Kindergarten within 800m",49,34,245,328,28.8478452066843,809
+"Primary school within 800m",79,50,288,417,36.6754617414248,720
+"District sports facility within 800m",58,31,281,370,32.5417766051011,767
+"Community health centre within 800m",0,1,6,7,0.615655233069481,1130
+"Maternal & child health centre within 800m",36,14,107,157,13.8082673702726,980
+"GP within 400m",5,1,91,97,8.53122251539138,1040
+"Dentist within 800m",184,53,182,419,36.8513632365875,718
+"Number of NACs",294,136,707,1137,100,0
