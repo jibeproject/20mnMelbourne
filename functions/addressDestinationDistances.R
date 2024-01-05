@@ -40,7 +40,6 @@ addressDestinationDistances <- function(destinations,
             network.nodes$id[st_nearest_feature(residential.addresses, network.nodes)])
 
   # unique residential address nodes
-  
   residential.nodes <- unique(residential.addresses$address.n.node)   
   
   
@@ -52,14 +51,8 @@ addressDestinationDistances <- function(destinations,
   g.links <- network.links %>%
     st_drop_geometry() %>%
     mutate(weight = length) %>%
-    dplyr::select(from_id, to_id, id, weight) #%>%
-    # mutate(id = as.numeric(id))
+    dplyr::select(from_id, to_id, id, weight)
   
-  # g.nodes <- network.nodes %>%
-  #   st_drop_geometry() %>%
-  #   mutate(id = as.numeric(id))
-  
-  # g <- graph_from_data_frame(g.links, directed = F, vertices = g.nodes)
   g <- graph_from_data_frame(g.links, directed = F)
   
   
@@ -90,39 +83,15 @@ addressDestinationDistances <- function(destinations,
     # find nearest nodes to destinations 
     # ---------------------------------#
     
-    # for park and district.sport, which are polygons, these are nearest nodes to 
-    # notional access points at 20m intervals along roads within 30m of boundary - see
-    # https://github.com/carlhiggs/Australian-National-Liveability-Study-2018-datasets-supplementary-material/blob/main/Identifying%20public%20open%20space%20using%20OpenStreetMap.md
-    # and also including nodes within the polygon
-    
-    if (destination.types[i] %in% c("park", "district_sport")) {
+    # find destination nodes (see findEntryNodes.R for details of how nodes
+    # are located for district_sport and park, which are polygons)
+
+    if (destination.types[i] %in% c("district_sport", "park")) {
       
-      # nodes within features
-      internal.nodes <- network.nodes %>%
-        st_intersection(destination) %>%
-        st_drop_geometry() %>%
-        .$id
-      
-      # report progress
-      print(paste(Sys.time(), "|", destination.types[i], "- making pseudo entry points"))
-      
-      # pseudo entry points at 20m intervals, within 30m of a road
-      pseudo.entry.points <- destination %>% 
-        # convert destination polygons boundaries to linestring
-        st_cast(to = "MULTILINESTRING") %>%
-        st_cast(to = "LINESTRING") %>%
-        # locate points at 20m along boundaries
-        st_line_sample(., density = units::set_units(20, m)) %>%
-        # intersect with roads buffered to 30m
-        # st_cast(to = "POINT")
-        st_intersection(st_buffer(network.links, 30))
-      
-      # nodes representing the pseudo entry points
-      entry.nodes <- 
-        network.nodes$id[st_nearest_feature(pseudo.entry.points, network.nodes)]
-      
-      # internal nodes and entry nodes combined
-      dest.nodes <- unique(c(internal.nodes, entry.nodes))
+      dest.nodes <- findEntryNodes(destination.types[i],
+                                   destination,
+                                   network.nodes,
+                                   network.links)
       
     } else {
       

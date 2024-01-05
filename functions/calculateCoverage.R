@@ -85,6 +85,8 @@ calculateCoverage <- function(residential.addresses,
              filter(pharmacy <= 800) %>%  nrow() / residences * 100,
            post.800 = get(area) %>%
              filter(post <= 800) %>% nrow() / residences * 100,
+           distsport.800 = get(area) %>%
+             filter(district_sport <= 800) %>%  nrow() / residences * 100,
            park.400 = get(area) %>%
              filter(park <= 400) %>%  nrow() / residences * 100,
            comm.ctr.800 = get(area) %>%
@@ -95,8 +97,6 @@ calculateCoverage <- function(residential.addresses,
              filter(kindergarten <= 800) %>%  nrow() / residences * 100,
            primary.800 = get(area) %>%
              filter(primary <= 800) %>%  nrow() / residences * 100,
-           distsport.800 = get(area) %>%
-             filter(district_sport <= 800) %>%  nrow() / residences * 100,
            comm.health.800 = get(area) %>%
              filter(community_health <= 800) %>%  nrow() / residences * 100,
            mat.child.health.800 = get(area) %>%
@@ -132,12 +132,12 @@ calculateCoverage <- function(residential.addresses,
              dest.dist == "bakery.800"      ~ "Bakery within 800m",
              dest.dist == "pharmacy.800"    ~ "Pharmacy within 800m",
              dest.dist == "post.800"        ~ "Post office within 800m",
+             dest.dist == "distsport.800"   ~ "District sports facility within 800m",
              dest.dist == "park.400"        ~ "Local park within 400m",
              dest.dist == "comm.ctr.800"    ~ "Community centre within 800m",
              dest.dist == "childcare.800"   ~ "Childcare centre within 800m",
              dest.dist == "kindergarten.800"  ~ "Kindergarten within 800m",
              dest.dist == "primary.800"     ~ "Primary school within 800m",
-             dest.dist == "distsport.800"   ~ "District sports facility within 800m",
              dest.dist == "comm.health.800" ~ "Community health centre within 800m",
              dest.dist == "mat.child.health.800"  ~ 
                "Maternal & child health centre within 800m",

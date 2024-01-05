@@ -76,6 +76,9 @@ calculateNacCoverage <- function(address.destination.distances,
                 post.800 = nac.distances %>%
                   filter(post <= 800) %>%
                   nrow() / nrow(nac.distances) * 100,
+                distsport.800 = nac.distances %>%
+                  filter(district_sport <= 800) %>%  
+                  nrow() / nrow(nac.distances) * 100,
                 park.400 = nac.distances %>%
                   filter(park <= 400) %>%
                   nrow() / nrow(nac.distances) * 100,
@@ -90,9 +93,6 @@ calculateNacCoverage <- function(address.destination.distances,
                   nrow() / nrow(nac.distances) * 100,
                 primary.800 = nac.distances %>%
                   filter(primary <= 800) %>%
-                  nrow() / nrow(nac.distances) * 100,
-                distsport.800 = nac.distances %>%
-                  filter(district_sport <= 800) %>%  
                   nrow() / nrow(nac.distances) * 100,
                 comm.health.800 = nac.distances %>%
                   filter(community_health <= 800) %>%

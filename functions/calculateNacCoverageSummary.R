@@ -40,7 +40,7 @@ calculateNacCoverageSummary <- function(NAC.pct.coverage) {
       # percentages of NACs satifying 80% condition for each destination
       mutate(pct = no / n * 100) %>%
       
-      # add new text column, based on row names - EXPAND FOR NEW DESTINATIONS WHEN AVAILABLE
+      # add new text column, based on row names
       mutate(dest.dist = row.names(.),
              dest.dist = case_when(
                dest.dist == "rest.cafe.400"   ~ "Restaurant or cafe within 400m",
@@ -53,12 +53,12 @@ calculateNacCoverageSummary <- function(NAC.pct.coverage) {
                dest.dist == "bakery.800"      ~ "Bakery within 800m",
                dest.dist == "pharmacy.800"    ~ "Pharmacy within 800m",
                dest.dist == "post.800"        ~ "Post office within 800m",
+               dest.dist == "distsport.800"   ~ "District sports facility within 800m",
                dest.dist == "park.400"        ~ "Local park within 400m",
                dest.dist == "comm.ctr.800"    ~ "Community centre within 800m",
                dest.dist == "childcare.800"   ~ "Childcare centre within 800m",
                dest.dist == "kindergarten.800"  ~ "Kindergarten within 800m",
                dest.dist == "primary.800"     ~ "Primary school within 800m",
-               dest.dist == "distsport.800"   ~ "District sports facility within 800m",
                dest.dist == "comm.health.800" ~ "Community health centre within 800m",
                dest.dist == "mat.child.health.800"  ~ 
                  "Maternal & child health centre within 800m",

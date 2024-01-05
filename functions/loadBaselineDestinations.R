@@ -4,11 +4,27 @@
 # dataframe (sf object) for each destination type, based on input files
 
 
-loadBaselineDestinations <- function(POIs, ANLS.pos, ANLS.dest,
+loadBaselineDestinations <- function(POIs.location, 
+                                     ANLS.pos.location,
                                      temp_osm_2023.location,
-                                     community.centre,
-                                     community.health,
+                                     community.centre.location,
+                                     community.health.location,
                                      region_buffer) {
+  
+  # read in the destination files
+  POIs <- st_read(POIs.location)
+  
+  ANLS.pos <- st_read(ANLS.pos.location, layer = "public_open_space_osm_2018") %>%
+    st_transform(PROJECT.CRS)
+  
+  ANLS.dest <- st_read(ANLS.dest.location, layer = "study_destinations") %>%
+    st_transform(PROJECT.CRS)
+  
+  community.centre <- st_read(community.centre.location)
+  
+  community.health <- st_read(community.health.location)
+  
+  
   # destination types
   destination.types <- c()
   
@@ -65,6 +81,15 @@ loadBaselineDestinations <- function(POIs, ANLS.pos, ANLS.dest,
   post <- POIs %>%
     filter(Attribute == "post_office")
   
+  # district sport
+  destination.types <- c(destination.types, "district_sport")
+  district_sport <- ANLS.pos %>% 
+    st_filter(region_buffer, .predicate = st_intersects) %>%
+    mutate(area_ha = as.numeric(st_area(.)) / 10000) %>%
+    filter(area_ha > 5) %>%
+    st_filter(st_read(temp_osm_2023.location, layer = "sport"),
+              .predicate = st_intersects)
+  
   # local parks
   destination.types <- c(destination.types, "park")
   park <- ANLS.pos %>%
@@ -97,15 +122,6 @@ loadBaselineDestinations <- function(POIs, ANLS.pos, ANLS.dest,
   primary <- ANLS.dest %>%
     filter(dest_name %in% c("primary_schools2018", "P_12_Schools2018")) %>%
     st_filter(region_buffer, .predicate = st_intersects)
-  
-  # district sport
-  destination.types <- c(destination.types, "district_sport")
-  district_sport <- ANLS.pos %>% 
-    st_filter(region_buffer, .predicate = st_intersects) %>%
-    mutate(area_ha = as.numeric(st_area(.)) / 10000) %>%
-    filter(area_ha > 5) %>%
-    st_filter(st_read(temp_osm_2023.location, layer = "sport"),
-              .predicate = st_intersects)
   
   # community health centre
   destination.types <- c(destination.types, "community_health")

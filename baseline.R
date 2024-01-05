@@ -1,10 +1,73 @@
-# add destinations to NACs for 20 minute neighbourhood intervention
+# investigate baseline NAC destinations coverage for 20 minute neighbourhood intervention
 
 #------------------------------------------------------------------------------#
 # Process ----
-# 1 
+# •	Find residential addresses (section 2)
+#   o	Filter addresses to study region (Greater Melbourne GCCSA plus 10km buffer), 
+#     and to residential meshblocks.
+#   o	Add an ‘id’ field, for later linking to distances outputs.
+#   o	Identify nearest network node to each residential address (‘residential nodes’).
+#   o	Result saved as output/residential_addresses.sqlite.
+# •	Make catchment for each NAC (section 3.1 and functions/makeNacCatchments.R).  
+#   o	Load Neighbourhood Activity Centre (NAC) polygons and supermarkets
+#   o	Catchment distance is 400m (small NAC) or 800m (medium or large NAC)  
+#   o	Select anchor nodes, which are nearest nodes to supermarkets in the NAC if 
+#     any, or else NAC centroid.
+#   o	Select links within that euclidean catchment distance of the anchor nodes 
+#     (only places that are within the Euclidean distance can be within the network distance).  
+#   o	Densify those links with new nodes every 5m, creating a subnetwork.  
+#   o	Calculate network distances (using the subnetwork) from anchor nodes to 
+#     all other nodes, and select nodes reachable within the 400m or 800m buffer 
+#     distance as applicable.  
+#   o	Load residential addresses, find the nearest subnetwork node to each, and 
+#     filter to the addresses where the nearest subnetwork node is a node 
+#     reachable within the buffer distance.  Save as ‘nac catchment addresses’.
+#   o	Draw a polygon around the nac catchment addresses: Voronoi polygons of the
+#     addresses within the Euclidean buffer area, intersect with the underlying 
+#     addresses, filter to those which are catchment addresses, and dissolve.  
+#     Intersect with convex hull of the addresses to avoid extending too far into 
+#     unpopulated areas. Save as ‘nac catchment polygon’.
+#   o	Combine the outputs from all NACs into output//nac_catchment_addresses.rds 
+#     (a dataframe of lists of the address id’s for each NAC) and 
+#     output/nac_catchment_polygons.sqlite (a dataframe of the polygons for the NACs).
+# •	Find distances between addresses and destinations (section 4 and functions/addressDestinationDistances.R).
+#   o	Load baseline destinations
+#   o	For each destination type, find its nearest node (for polygons, these are 
+#     the nearest nodes to pseudo entry points at 20m intervals along the boundary 
+#     within 30m of a road, as well as nodes within the polygon itself)
+#   o	Find the distance from each residential address to the nearest destination of each type:
+#     	Find the nearest node to the destination (for polygons, being local parks 
+#       and district sports, nearest nodes to pseudo entry points at 20m intervals 
+#       along the boundary within 30m of a road, as well as nodes within the polygon itself)
+#     	Measure distance from destinations to addresses (doing it this way because 
+#       there are fewer destinations than addresses).
+#     	Where there are more than 1000 addresses, break them into groups of 1000 
+#       (because otherwise the destination matrix becomes impossibly large).  
+#       Assign each group a ‘dest group name’
+#     	For each destination group, get the distances to all the residential address 
+#       nodes – hold the distance matrix in memory if up to 4 groups, or save to a 
+#       temporary folder if more (because otherwise the memory can overflow with 
+#       large numbers).  Use parallel processing if over 4 groups.
+#     	Find the minimum distance to a destination feature for each address.  
+#       If more than 1 group of 1000, then find the minimum for each group of 1000, 
+#       and then find the minimum of minimums. 
+#     	Save minimum distance for each destination to a temporary file, where it 
+#       can then be joined to residential addresses.
+#   o	Output saved as output/baseline_distances.csv
+# •	Build table showing overall area coverage as percentage of residences with 
+#   access to each destination type within specified distance for Greater Melbourne, 
+#   all NACs, and large, medium and small NACs (section 5.1 and 
+#   functions/calculateCoverage.R).  Output saved as output/20mn baseline area coverage.csv.
+# •	Find percentage of residences in each NAC with access to each destination 
+#   type within specified walking distance (section 5.2 and functions/calculateNacCoverage.R).  
+#   Output saved as output /20mn baseline NAC coverage.csv.
+# •	Build table showing summary of number and percentage of all, large, medium 
+#   and small NACs with 80% of residences with access to each destination type 
+#   within specified distance (section 5.3 and functions/calculateNacCoverageSummary.R).  
+#   Output saved as output /20mn baseline NAC coverage summary.csv.
 
 #------------------------------------------------------------------------------#
+
 
 # 1 Setup ----
 #------------------------------------------------------------------------------#
@@ -18,8 +81,6 @@ library(lwgeom)  # used in densifySubNetwork
 library(doSNOW)
 library(parallel)
 library(foreach)
-
-# library(tibble)  # for 'repair_names' in addressDestinationDestances - trial improvement
 
 library(ggplot2)  # testing only
 
@@ -117,7 +178,7 @@ nac.catchment.polygon.location <- "./output/nac_catchment_polygons.sqlite"
 # baseline address destination distances: set to F if using existing, or create in section 4
 find.baseline.distances <- F
 baseline.distance.location <- "./output/baseline_distances.csv"
-baseline.distport.location <- "./output/baseline_distsport_display.sqlite"
+baseline.distsport.location <- "./output/baseline_distsport_display.sqlite"
 
 # directory for outputs
 if (!dir.exists("./output")) {
@@ -227,23 +288,12 @@ if (find.baseline.distances) {
   
   # load baseline destinations - a list containing (1) a vector of 'destination 
   # types', and (2) a dataframe (sf object) for each destination type, based on 
-  # input files 'POIs', 'ANLS.pos' and 'ANLS.dest'
-  POIs <- st_read(POIs.location)
-  
-  ANLS.pos <- st_read(ANLS.pos.location, layer = "public_open_space_osm_2018") %>%
-    st_transform(PROJECT.CRS)
-  
-  ANLS.dest <- st_read(ANLS.dest.location, layer = "study_destinations") %>%
-    st_transform(PROJECT.CRS)
-  
-  community.centre <- st_read(community.centre.location)
-  
-  community.health <- st_read(community.health.location)
-  
-  baseline.destinations <- loadBaselineDestinations(POIs, ANLS.pos, ANLS.dest,
+  # input files 'POIs', 'ANLS.pos', 'ANLS.dest' etc
+  baseline.destinations <- loadBaselineDestinations(POIs.location, 
+                                                    ANLS.pos.location,
                                                     temp_osm_2023.location,
-                                                    community.centre,
-                                                    community.health,
+                                                    community.centre.location,
+                                                    community.health.location,
                                                     region_buffer)
   
   # find the distances
@@ -256,9 +306,10 @@ if (find.baseline.distances) {
   # save output
   write.csv(baseline.distances, baseline.distance.location, row.names = FALSE)
   
-  # save district sport output for display
-  st_write(baseline.destinations[[17]], ## check that district sport is 17!
-           baseline.distport.location, delete_layer = TRUE)
+  # save district sport output for display (find the index of 'district_sport' 
+  # in destination.types, then it's that index plus 1 in the baseline destinations list)
+  st_write(baseline.destinations[[which(destination.types == "district_sport") + 1]],
+           baseline.distsport.location, delete_layer = TRUE)
   
 }
 
