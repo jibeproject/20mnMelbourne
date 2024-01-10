@@ -2,9 +2,40 @@
 
 #------------------------------------------------------------------------------#
 # Process ----
-# •	
-
+# •	For each destination type, identify the NACs that failed the test.
+# •	‘Fail the test’ means that 80% of dwellings in a NAC are not within the 
+#    required walking distance (400m, 600m or 800m as applicable) of the 
+#    relevant destination type.
+# •	Order the failed NACs.  
+#   o	For destinations where 400m walking distance is required (restaurant_cafe, 
+#     bus, convenience_store, park, gp), order small to large: a large NAC 
+#     should be made up of small NACs, each of which contains these, so fill out 
+#     the small NACs first.  For the 800m destinations, order large to small: a 
+#     large NAC should contain these, so they are accessible to small NACs within it.  
+#   o	Within each size category, order by neediest first, with the aim of 
+#     maximising the possibility of a new destination also helping other NACs 
+#     pass the test. ‘Neediest’ is lowest percentage of dwellings within the 
+#     required distance and, in case of equality, highest number of dwellings.
+# •	For each ‘failed NAC’:
+#   o	Test whether the NAC now passes the test, taking account of any new 
+#     destinations that may already have been added (functions/testFailedNac.R). 
+#   o	If it fails the test, identify the ‘failed addresses’ that are not within 
+#     the required distance.  Add a new location at the node which maximises the 
+#     number of failed addresses that are now reachable within the required distance 
+#     and, if several nodes reach the same maximum number, select the one which 
+#     minimises the sum of the distances for all failed addresses (functions/addLocation.R).  
+#     Re-test, and continue adding locations until the test is met.
+#   o	When searching for the best location node, candidate nodes are:
+#     	for supermarket, butcher, bakery, pharmacy or post for all NACs; or 
+#       for restaurant_cafe or convenience_store for small NACs only – nodes 
+#       on links that are within 30m of the NAC (ie the core); or
+#     	otherwise – nodes within 400m (restaurant_cafe, bus, convenience_store, 
+#       park, gp) or 800m (otherwise) of the failed addresses.
+#   o	Include any added locations in the dataframe of new destinations, which 
+#     are used when re-testing the current NAC and testing further NACs. 
 #------------------------------------------------------------------------------#
+
+
 # 1 Setup ----
 #------------------------------------------------------------------------------#
 ## 1.1 Libraries ----
