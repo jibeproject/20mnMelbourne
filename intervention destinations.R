@@ -247,13 +247,14 @@ for (i in 1:length(destination.types)) {
   )
   
   # required distance for 80% of addresses
-  required.dist <- case_when(
-    destination.type %in% c("restaurant_cafe", "bus", "convenience_store",
-                            "park", "gp")  ~ 400,
-    destination.type == "bus" ~ c(400, 600, 800), 
-    TRUE     ~ 800,
-  )
-  
+  if (destination.type %in% c("restaurant_cafe", "convenience_store", "park", "gp")) {
+    required.dist <- 400
+  } else if (destination.type == "bus") {
+    required.dist <- c(400, 600, 800)
+  } else {
+    required.dist <- 800
+  }
+
   # find NACs that failed the 80% test in baseline
   failed.NACs <- baseline.NAC.coverage %>%
     dplyr::select(centre_no, size, !!destination.field) %>%

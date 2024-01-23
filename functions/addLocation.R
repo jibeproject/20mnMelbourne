@@ -60,6 +60,25 @@ addLocation <- function(failed.addresses,
   print(paste(Sys.time(), "| > Looking for", destination.type, "location for",
               nrow(failed.addresses), "dwellings for centre no", NAC$CENTRE_NO))
 
+# # sample plot - adjust XX wherever appears
+# outputXX <- ggplot() +
+#   geom_sf(data = NAC.addresses, colour = "blue") +
+#   geom_sf(data = failed.addresses, colour = "red") +
+#   geom_sf(data = destination.locations %>%
+#             st_filter(NAC.addresses %>% st_buffer(., 400), .predicate = st_intersects),
+#           colour = "black", shape = 15, size = 4) +
+#   geom_sf(data = new.locations, colour = "black", shape = 1, size = 10, stroke = 2, fill = NA) +
+#   theme_minimal() +  # Use a minimal theme
+#   theme(panel.grid = element_blank(),     # Remove gridlines
+#         axis.title = element_blank(),    # Remove axis titles
+#         axis.text = element_blank(),     # Remove axis text
+#         panel.border = element_blank(),  # Remove panel border
+#         plot.margin = margin(0, 0, 0, 0)) # Remove plot margin
+# 
+# ggsave("./images/outputsketchXX.png", plot = outputXX, width = 20, height = 20, units = "cm")
+# 
+
+
   # find new location
   # -----------------------------------#
   

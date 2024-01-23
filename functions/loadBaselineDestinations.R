@@ -5,6 +5,7 @@
 
 
 loadBaselineDestinations <- function(POIs.location, 
+                                     ANLS.dest.location,
                                      ANLS.pos.location,
                                      temp_osm_2023.location,
                                      community.centre.location,
@@ -14,10 +15,10 @@ loadBaselineDestinations <- function(POIs.location,
   # read in the destination files
   POIs <- st_read(POIs.location)
   
-  ANLS.pos <- st_read(ANLS.pos.location, layer = "public_open_space_osm_2018") %>%
+  ANLS.dest <- st_read(ANLS.dest.location, layer = "study_destinations") %>%
     st_transform(PROJECT.CRS)
   
-  ANLS.dest <- st_read(ANLS.dest.location, layer = "study_destinations") %>%
+  ANLS.pos <- st_read(ANLS.pos.location, layer = "public_open_space_osm_2018") %>%
     st_transform(PROJECT.CRS)
   
   community.centre <- st_read(community.centre.location)

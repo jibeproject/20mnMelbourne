@@ -290,6 +290,7 @@ if (find.baseline.distances) {
   # types', and (2) a dataframe (sf object) for each destination type, based on 
   # input files 'POIs', 'ANLS.pos', 'ANLS.dest' etc
   baseline.destinations <- loadBaselineDestinations(POIs.location, 
+                                                    ANLS.dest.location,
                                                     ANLS.pos.location,
                                                     temp_osm_2023.location,
                                                     community.centre.location,

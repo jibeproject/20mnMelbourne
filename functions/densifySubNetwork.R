@@ -50,7 +50,7 @@ densifySubNetwork <- function(links, network.nodes, DENSIFICATION.DIST) {
     st_set_geometry(st_sfc(links_list_segmented)) %>%
     mutate(group_id = row_number()) %>%
     st_cast(to = "MULTILINESTRING") %>%
-    # st_snap_to_grid(1) %>%
+    # st_snap_to_grid(1) %>%  ## MAYBE THIS SHOULD GO BACK IN?
     st_sf() %>%
     st_cast(to = "LINESTRING") %>%
     mutate(new_node_id = row_number() + max(nodes_df$id, na.rm=T)) %>%
