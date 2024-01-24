@@ -1,0 +1,16 @@
+"","dest.dist","large.no","medium.no","small.no","all.no","all.pct","all.shortfall"
+"supermarket.800","Supermarket",255,86,169,510,44.8548812664908,627
+"pharmacy.800","Pharmacy",124,53,145,322,28.3201407211961,815
+"post.800","Post office",63,37,74,174,15.3034300791557,963
+"gp.800","GP",222,82,271,575,50.5716798592788,562
+"mat.child.health.800","Maternal & child health centre",36,14,107,157,13.8082673702726,980
+"dentist.800","Dentist",184,53,182,419,36.8513632365875,718
+"childcare.800","Childcare centre",248,114,542,904,79.5074758135444,233
+"kindergarten.800","Kindergarten",49,34,245,328,28.8478452066843,809
+"primary.800","Primary school",79,50,288,417,36.6754617414248,720
+"comm.library.800","Community centre or library",41,17,75,133,11.6974494283201,1004
+"convenience.400","Convenience store or supermarket",13,2,201,216,18.9973614775726,921
+"rest.cafe.400","Restaurant or cafe",29,3,260,292,25.6816182937555,845
+"park.400","Local park",144,69,387,600,52.7704485488127,537
+"bus.400.tram.600.train.800","Bus stop, tram stop or train station",245,96,594,935,82.2339489885664,202
+"acs","Number of ACs",294,136,707,1137,100,0

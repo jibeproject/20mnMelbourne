@@ -7,9 +7,6 @@
 loadBaselineDestinations <- function(POIs.location, 
                                      ANLS.dest.location,
                                      ANLS.pos.location,
-                                     temp_osm_2023.location,
-                                     community.centre.location,
-                                     community.health.location,
                                      region_buffer) {
   
   # read in the destination files
@@ -21,33 +18,9 @@ loadBaselineDestinations <- function(POIs.location,
   ANLS.pos <- st_read(ANLS.pos.location, layer = "public_open_space_osm_2018") %>%
     st_transform(PROJECT.CRS)
   
-  community.centre <- st_read(community.centre.location)
-  
-  community.health <- st_read(community.health.location)
-  
-  
+
   # destination types
   destination.types <- c()
-  
-  # restaurants and cafes
-  destination.types <- c(destination.types, "restaurant_cafe")
-  restaurant_cafe <- POIs %>%
-    filter(Attribute %in% c("restaurant", "cafe"))
-  
-  # bus 
-  destination.types <- c(destination.types, "bus")
-  bus <- POIs %>%
-    filter(Attribute == "bus")
-  
-  # tram 
-  destination.types <- c(destination.types, "tram")
-  tram <- POIs %>%
-    filter(Attribute == "tram")
-  
-  destination.types <- c(destination.types, "train")
-  train <- ANLS.dest %>%
-    filter(dest_name == "gtfs_2018_stops_train") %>%
-    st_filter(region_buffer, .predicate = st_intersects)
   
   # supermarket 
   destination.types <- c(destination.types, "supermarket")
@@ -60,17 +33,10 @@ loadBaselineDestinations <- function(POIs.location,
     filter(dest_name == "convenience_osm") %>%
     st_filter(region_buffer, .predicate = st_intersects)
   
-  # butcher
-  destination.types <- c(destination.types, "butcher")
-  butcher <- ANLS.dest %>%
-    filter(dest_name == "meat_seafood_osm") %>%
-    st_filter(region_buffer, .predicate = st_intersects)
-  
-  # bakery
-  destination.types <- c(destination.types, "bakery")
-  bakery <- ANLS.dest %>%
-    filter(dest_name == "bakery_osm") %>%
-    st_filter(region_buffer, .predicate = st_intersects)
+  # restaurant and cafe
+  destination.types <- c(destination.types, "restaurant_cafe")
+  restaurant_cafe <- POIs %>%
+    filter(Attribute %in% c("restaurant", "cafe"))
   
   # pharmacy
   destination.types <- c(destination.types, "pharmacy")
@@ -82,25 +48,22 @@ loadBaselineDestinations <- function(POIs.location,
   post <- POIs %>%
     filter(Attribute == "post_office")
   
-  # district sport
-  destination.types <- c(destination.types, "district_sport")
-  district_sport <- ANLS.pos %>% 
-    st_filter(region_buffer, .predicate = st_intersects) %>%
-    mutate(area_ha = as.numeric(st_area(.)) / 10000) %>%
-    filter(area_ha > 5) %>%
-    st_filter(st_read(temp_osm_2023.location, layer = "sport"),
-              .predicate = st_intersects)
-  
-  # local parks
-  destination.types <- c(destination.types, "park")
-  park <- ANLS.pos %>%
+  # GP
+  destination.types <- c(destination.types, "gp")
+  gp <- ANLS.dest %>%
+    filter(dest_name == "nhsd_2017_gp") %>%
     st_filter(region_buffer, .predicate = st_intersects)
   
-  # community centre  COME BACK TO THIS  
-  destination.types <- c(destination.types, "community_centre")
-  # community_centre <- POIs %>%
-  #   filter(Attribute == "community centre")
-  community_centre <- community.centre  %>%
+  # maternal/child health centre
+  destination.types <- c(destination.types, "maternal_child_health")
+  maternal_child_health <- ANLS.dest %>%
+    filter(dest_name == "nhsd_2017_mc_family_health") %>%
+    st_filter(region_buffer, .predicate = st_intersects)
+  
+  # dentist
+  destination.types <- c(destination.types, "dentist")
+  dentist <- ANLS.dest %>%
+    filter(dest_name == "nhsd_2017_dentist") %>%
     st_filter(region_buffer, .predicate = st_intersects)
   
   # childcare
@@ -110,48 +73,43 @@ loadBaselineDestinations <- function(POIs.location,
   
   # kindergarten
   destination.types <- c(destination.types, "kindergarten")
-  # kindergarten <- st_read(temp_osm_2023.location, layer = "kindergarten") %>%
-  #   st_filter(region_buffer, .predicate = st_intersects)
   kindergarten <- ANLS.dest %>%
     filter(dest_name == "childcare_preschool_2019") %>%
     st_filter(region_buffer, .predicate = st_intersects)
   
   # primary school
   destination.types <- c(destination.types, "primary")
-  # primary <- POIs %>%
-  #   filter(Attribute %in% c("primary school", "primary/secondary school"))
   primary <- ANLS.dest %>%
     filter(dest_name %in% c("primary_schools2018", "P_12_Schools2018")) %>%
     st_filter(region_buffer, .predicate = st_intersects)
   
-  # community health centre
-  destination.types <- c(destination.types, "community_health")
-  # community_health <- POIs %>%
-  #   filter(Attribute == "community health centre")
-  community_health <- community.health %>%
+  # community centre and library
+  destination.types <- c(destination.types, "community_centre_library")
+  community_centre_library <- POIs %>%
+    filter(Attribute %in% c("community centre", "library"))
+  
+  # local parks
+  destination.types <- c(destination.types, "park")
+  park <- ANLS.pos %>%
     st_filter(region_buffer, .predicate = st_intersects)
   
-  # maternal/child health centre
-  destination.types <- c(destination.types, "maternal_child_health")
-  # maternal_child_health <- POIs %>%
-  #   filter(Attribute == "maternal/child health centre")
-  maternal_child_health <- ANLS.dest %>%
-    filter(dest_name == "nhsd_2017_mc_family_health") %>%
+  # bus 
+  destination.types <- c(destination.types, "bus")
+  bus <- POIs %>%
+    filter(Attribute == "bus")
+  
+  # tram 
+  destination.types <- c(destination.types, "tram")
+  tram <- POIs %>%
+    filter(Attribute == "tram")
+  
+  #train
+  destination.types <- c(destination.types, "train")
+  train <- ANLS.dest %>%
+    filter(dest_name == "gtfs_2018_stops_train") %>%
     st_filter(region_buffer, .predicate = st_intersects)
   
-  # GP
-  destination.types <- c(destination.types, "gp")
-  gp <- ANLS.dest %>%
-    filter(dest_name == "nhsd_2017_gp") %>%
-    st_filter(region_buffer, .predicate = st_intersects)
 
-  # dentist
-  destination.types <- c(destination.types, "dentist")
-  dentist <- ANLS.dest %>%
-    filter(dest_name == "nhsd_2017_dentist") %>%
-    st_filter(region_buffer, .predicate = st_intersects)
-  
-  
   # output list, consisting of 'destination.types' and each destination dataframe
   output.list <- list(destination.types)
   for (i in 1:length(destination.types)) {

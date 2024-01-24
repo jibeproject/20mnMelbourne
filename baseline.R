@@ -1,4 +1,4 @@
-# investigate baseline NAC destinations coverage for 20 minute neighbourhood intervention
+# investigate baseline AC destinations coverage for 20 minute neighbourhood intervention
 
 #------------------------------------------------------------------------------#
 # Process ----
@@ -8,11 +8,11 @@
 #   o	Add an ‘id’ field, for later linking to distances outputs.
 #   o	Identify nearest network node to each residential address (‘residential nodes’).
 #   o	Result saved as output/residential_addresses.sqlite.
-# •	Make catchment for each NAC (section 3.1 and functions/makeNacCatchments.R).  
-#   o	Load Neighbourhood Activity Centre (NAC) polygons and supermarkets
-#   o	Catchment distance is 400m (small NAC) or 800m (medium or large NAC)  
-#   o	Select anchor nodes, which are nearest nodes to supermarkets in the NAC if 
-#     any, or else NAC centroid.
+# •	Make catchment for each AC (section 3.1 and functions/makeAcCatchments.R).  
+#   o	Load  Activity Centre (AC) polygons and supermarkets
+#   o	Catchment distance is 400m (small AC) or 800m (medium or large AC)  
+#   o	Select anchor nodes, which are nearest nodes to supermarkets in the AC if 
+#     any, or else AC centroid.
 #   o	Select links within that euclidean catchment distance of the anchor nodes 
 #     (only places that are within the Euclidean distance can be within the network distance).  
 #   o	Densify those links with new nodes every 5m, creating a subnetwork.  
@@ -21,15 +21,15 @@
 #     distance as applicable.  
 #   o	Load residential addresses, find the nearest subnetwork node to each, and 
 #     filter to the addresses where the nearest subnetwork node is a node 
-#     reachable within the buffer distance.  Save as ‘nac catchment addresses’.
-#   o	Draw a polygon around the nac catchment addresses: Voronoi polygons of the
+#     reachable within the buffer distance.  Save as ‘ac catchment addresses’.
+#   o	Draw a polygon around the AC catchment addresses: Voronoi polygons of the
 #     addresses within the Euclidean buffer area, intersect with the underlying 
 #     addresses, filter to those which are catchment addresses, and dissolve.  
 #     Intersect with convex hull of the addresses to avoid extending too far into 
-#     unpopulated areas. Save as ‘nac catchment polygon’.
-#   o	Combine the outputs from all NACs into output//nac_catchment_addresses.rds 
-#     (a dataframe of lists of the address id’s for each NAC) and 
-#     output/nac_catchment_polygons.sqlite (a dataframe of the polygons for the NACs).
+#     unpopulated areas. Save as ‘ac catchment polygon’.
+#   o	Combine the outputs from all ACs into output/ac_catchment_addresses.rds 
+#     (a dataframe of lists of the address id’s for each AC) and 
+#     output/ac_catchment_polygons.sqlite (a dataframe of the polygons for the ACs).
 # •	Find distances between addresses and destinations (section 4 and functions/addressDestinationDistances.R).
 #   o	Load baseline destinations
 #   o	For each destination type, find its nearest node (for polygons, these are 
@@ -56,15 +56,15 @@
 #   o	Output saved as output/baseline_distances.csv
 # •	Build table showing overall area coverage as percentage of residences with 
 #   access to each destination type within specified distance for Greater Melbourne, 
-#   all NACs, and large, medium and small NACs (section 5.1 and 
+#   all ACs, and large, medium and small ACs (section 5.1 and 
 #   functions/calculateCoverage.R).  Output saved as output/20mn baseline area coverage.csv.
-# •	Find percentage of residences in each NAC with access to each destination 
-#   type within specified walking distance (section 5.2 and functions/calculateNacCoverage.R).  
-#   Output saved as output /20mn baseline NAC coverage.csv.
+# •	Find percentage of residences in each AC with access to each destination 
+#   type within specified walking distance (section 5.2 and functions/calculateAcCoverage.R).  
+#   Output saved as output /20mn baseline AC coverage.csv.
 # •	Build table showing summary of number and percentage of all, large, medium 
-#   and small NACs with 80% of residences with access to each destination type 
-#   within specified distance (section 5.3 and functions/calculateNacCoverageSummary.R).  
-#   Output saved as output /20mn baseline NAC coverage summary.csv.
+#   and small ACs with 80% of residences with access to each destination type 
+#   within specified distance (section 5.3 and functions/calculateAcCoverageSummary.R).  
+#   Output saved as output /20mn baseline AC coverage summary.csv.
 
 #------------------------------------------------------------------------------#
 
@@ -87,21 +87,21 @@ library(ggplot2)  # testing only
 
 ## 1.2 Functions ----
 ## ------------------------------------#
-dir_walk(path="./functions/",source, recurse=T, type = "file")
+dir_walk(path = "./functions/", source, recurse = T, type = "file")
 
 
 ## 1.3 Parameters ----
 ## ------------------------------------#
 PROJECT.CRS <- 28355
-BUFFDIST.SMALL <- 400  # distance to buffer small NACs
-BUFFDIST.MED.LARGE <- 800  # distance to buffer medium and large NACs
-DENSIFICATION.DIST <- 5  # distance to densify links for finding NAC catchments
+BUFFDIST.SMALL <- 400  # distance to buffer small ACs
+BUFFDIST.MED.LARGE <- 800  # distance to buffer medium and large ACs
+DENSIFICATION.DIST <- 5  # distance to densify links for finding AC catchments
 
 
 ## 1.4 Data ----
 ## ------------------------------------#
-# neighbourhood activity centres
-NACs <- read_zipped_GIS(zipfile = "../data/original/MICLUP-NACs.zip",
+#  activity centres
+ACs <- read_zipped_GIS(zipfile = "../data/original/MICLUP-NACs.zip",
     file = "/MICLUP_COMMERCIAL_EXT_JUN2020.shp") %>%
   st_transform(PROJECT.CRS) %>%
   mutate(size = case_when(
@@ -162,18 +162,15 @@ ANLS.pos.location <-
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
 ANLS.dest.location <- 
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
-temp_osm_2023.location <- "../data/processed/temp_osm_2023.sqlite"
-community.centre.location <- "../data/processed/community_centre.sqlite"
-community.health.location <- "../data/processed/community_health.sqlite"
 
 # residential addresses: set to F if using existing, or create in section 2
 find.residential.addresses <- F
 residential.address.location <- "./output/residential_addresses.sqlite"
 
-# NAC catchments: set to F if using existing, or create in section 3
-make.NAC.catchments <- F
-nac.catchment.address.location <- "./output/nac_catchment_addresses.rds"
-nac.catchment.polygon.location <- "./output/nac_catchment_polygons.sqlite"
+# AC catchments: set to F if using existing, or create in section 3
+make.AC.catchments <- F
+ac.catchment.address.location <- "./output/ac_catchment_addresses.rds"
+ac.catchment.polygon.location <- "./output/ac_catchment_polygons.sqlite"
 
 # baseline address destination distances: set to F if using existing, or create in section 4
 find.baseline.distances <- F
@@ -224,40 +221,36 @@ if (find.residential.addresses) {
 }
 
 
-# 3 NAC catchments ----
+# 3 AC catchments ----
 # -----------------------------------------------------------------------------#
-# create NAC catchments
-if (make.NAC.catchments) {
+# create AC catchments
+if (make.AC.catchments) {
   
   # load inputs
   supermarkets <- st_read(POIs.location) %>% filter(Attribute == "supermarket")
   residential.addresses <- st_read(residential.address.location)
   
-  # omit 14 'undeveloped' NACs (can't select buffers for them)
-  NACs.filtered <- NACs %>%
+  # omit 14 'undeveloped' ACs (can't select buffers for them)
+  ACs.filtered <- ACs %>%
     filter(CENTRESIZE != "Undeveloped")
   
-  # CONSIDER FURTHER whether to omit any or all Fishermans Bend NACs
-  # (1119, 1125, 1126, 1127, 1128, 1129, 1130, 1131 - all except 1119
-  # have CENTRESIZE < 2000)
-  
-  # create temporary catchments folders to hold outputs from makeNacCatchments
+  # create temporary catchments folders to hold outputs from makeAcCatchments
   temp.address.location <- "./catchment addresses"
   temp.polygon.location <- "./catchment polygons"
   dir.create(temp.address.location)
   dir.create(temp.polygon.location)
   
   # run the function - saves files to the catchments folders
-  makeNacCatchments(NACs.filtered,
-                    supermarkets,
-                    network.nodes,
-                    network.links,
-                    residential.addresses,
-                    BUFFDIST.SMALL,
-                    BUFFDIST.MED.LARGE,
-                    DENSIFICATION.DIST, 
-                    temp.address.location,
-                    temp.polygon.location)
+  makeAcCatchments(ACs.filtered,
+                   supermarkets,
+                   network.nodes,
+                   network.links,
+                   residential.addresses,
+                   BUFFDIST.SMALL,
+                   BUFFDIST.MED.LARGE,
+                   DENSIFICATION.DIST, 
+                   temp.address.location,
+                   temp.polygon.location)
   
   # assemble outputs
   catchment.outputs <- assembleCatchmentOutputs(temp.address.location,
@@ -265,8 +258,8 @@ if (make.NAC.catchments) {
   
   
   # save the outputs
-  saveRDS(catchment.outputs[[1]], nac.catchment.address.location)
-  st_write(catchment.outputs[[2]], nac.catchment.polygon.location, 
+  saveRDS(catchment.outputs[[1]], ac.catchment.address.location)
+  st_write(catchment.outputs[[2]], ac.catchment.polygon.location, 
            delete_layer = TRUE)
   
   
@@ -292,9 +285,6 @@ if (find.baseline.distances) {
   baseline.destinations <- loadBaselineDestinations(POIs.location, 
                                                     ANLS.dest.location,
                                                     ANLS.pos.location,
-                                                    temp_osm_2023.location,
-                                                    community.centre.location,
-                                                    community.health.location,
                                                     region_buffer)
   
   # find the distances
@@ -307,11 +297,6 @@ if (find.baseline.distances) {
   # save output
   write.csv(baseline.distances, baseline.distance.location, row.names = FALSE)
   
-  # save district sport output for display (find the index of 'district_sport' 
-  # in destination.types, then it's that index plus 1 in the baseline destinations list)
-  st_write(baseline.destinations[[which(destination.types == "district_sport") + 1]],
-           baseline.distsport.location, delete_layer = TRUE)
-  
 }
 
 
@@ -323,61 +308,59 @@ if (find.baseline.distances) {
 
 # calculate overall area coverage as percentage of residences with access to 
 # each destination type within specified distance for Greater Melbourne, 
-# all NACs, and large, medium and small NACs
+# all ACs, and large, medium and small ACs
 
 # load inputs
 residential.addresses <- st_read(residential.address.location)
 baseline.distances <- read.csv(baseline.distance.location)
-nac.catchment.addresses <- readRDS(nac.catchment.address.location)
+ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 region <- st_read(region.location)
 
 # calculate coverage
 baseline.coverage <- calculateCoverage(residential.addresses,
                                        baseline.distances, 
-                                       nac.catchment.addresses, 
-                                       NACs,
+                                       ac.catchment.addresses, 
+                                       ACs,
                                        region)
 
 # write output
-write.csv(baseline.coverage, "./output/20mn baseline area coverage.csv",
-          row.names = FALSE)
+write.csv(baseline.coverage, "./output/20mn baseline area coverage.csv")
 
 
-## 5.2 NACs ----
+## 5.2 ACs ----
 ## ------------------------------------#
 
-# make table showing % of residences in each NAC within specified walking
+# make table showing % of residences in each AC within specified walking
 # distance of destinations
 
 # load inputs
 baseline.distances <- read.csv(baseline.distance.location)
-nac.catchment.addresses <- readRDS(nac.catchment.address.location)
+ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 
 # calculate coverage
-baseline.NAC.coverage <- calculateNacCoverage(baseline.distances,
-                                              nac.catchments.addresses,
-                                              NACs)
+baseline.AC.coverage <- calculateAcCoverage(baseline.distances,
+                                              ac.catchments.addresses,
+                                              ACs)
 
 # write output
-write.csv(baseline.NAC.coverage, "./output/20mn baseline NAC coverage.csv",
+write.csv(baseline.AC.coverage, "./output/20mn baseline AC coverage.csv",
           row.names = FALSE)
 
 
-## 5.3 NAC summary ----
+## 5.3 AC summary ----
 ## ------------------------------------#
 
-# summary table of NACs with 80% of residences with access to each destination
+# summary table of ACs with 80% of residences with access to each destination
 # type within specified walking distance
 
-# load NAC.pct.coverage from section 5.2
-baseline.NAC.coverage <- read.csv("./output/20mn baseline NAC coverage.csv")
+# load AC.pct.coverage from section 5.2
+baseline.AC.coverage <- read.csv("./output/20mn baseline AC coverage.csv")
 
 # calculate summary
-baseline.NAC.coverage.summary <- 
-  calculateNacCoverageSummary(baseline.NAC.coverage)
+baseline.AC.coverage.summary <- 
+  calculateAcCoverageSummary(baseline.AC.coverage)
 
 # write output
-write.csv(baseline.NAC.coverage.summary, 
-          "./output/20mn baseline NAC coverage summary.csv",
-          row.names = FALSE)
+write.csv(baseline.AC.coverage.summary, 
+          "./output/20mn baseline AC coverage summary.csv")
 

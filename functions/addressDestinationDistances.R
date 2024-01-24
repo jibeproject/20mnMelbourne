@@ -84,9 +84,9 @@ addressDestinationDistances <- function(destinations,
     # ---------------------------------#
     
     # find destination nodes (see findEntryNodes.R for details of how nodes
-    # are located for district_sport and park, which are polygons)
+    # are located for park, which are polygons)
 
-    if (destination.types[i] %in% c("district_sport", "park")) {
+    if (destination.types[i] %in% c("park")) {
       
       dest.nodes <- findEntryNodes(destination.types[i],
                                    destination,
