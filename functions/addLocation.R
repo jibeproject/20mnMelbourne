@@ -1,14 +1,14 @@
-# function to add a new destination location to a NAC to help it meet test of 
+# function to add a new destination location to an AC to help it meet test of 
 # 80% of residences within required distance
 
-# new destination is added at the location in the NAC (core or periphery,
+# new destination is added at the location in the AC (core or periphery,
 # depending on the destination type) which maximises the number of failed 
 # addresses that are now reachable within the required distance (and, if several 
 # nodes reach the same maximum number, select the one which minimises the sum of 
 # the distances for all failed addresses)
 
 addLocation <- function(failed.addresses,
-                        NAC,
+                        AC,
                         destination.type,
                         network.nodes,
                         network.links,
@@ -19,7 +19,7 @@ addLocation <- function(failed.addresses,
   # set up addresses and candidate nodes
   # -----------------------------------#
   
-  # unique NAC address network nodes 
+  # unique AC address network nodes 
   address.nodes <- unique(failed.addresses$address.n.node)
   
   # network nodes that are potential destination locations
@@ -27,16 +27,15 @@ addLocation <- function(failed.addresses,
   candidate.nodes <- c()
   
   # allocate candidate nodes according to whether core or periphery
-  # core - core 800m destinations; and core 400m destinations in small NACs 
+  # core - core 800m destinations; and core 400m destinations in small ACs 
   
-  # if core - nodes of links within 30m of NAC
-  if (destination.type %in% c("supermarket", "butcher", "bakery", "pharmacy",
-                              "post") |
-      (destination.type %in% c("restaurant_cafe", "convenience_store") & 
-       NAC$size == "small")) { 
+  # if core - nodes of links within 30m of AC
+  if (destination.type %in% c("supermarket", "pharmacy", "post") |
+      (destination.type %in% c("convenience_store", "restaurant_cafe") & 
+       AC$size == "small")) { 
     
     candidate.links <- network.links %>%
-      st_filter(st_buffer(NAC, 30), .predicate = st_intersects)
+      st_filter(st_buffer(AC, 30), .predicate = st_intersects)
     
     candidate.nodes <- c(candidate.links$from_id, candidate.links$to_id) %>%
       unique()
@@ -48,7 +47,7 @@ addLocation <- function(failed.addresses,
   # to satisfy the maximum number of failed addresses]
   if (length(candidate.nodes) == 0) {
     
-    search.area <- st_buffer(failed.addresses, required.dist) %>% 
+    search.area <- st_buffer(failed.addresses, required.dist[1]) %>% 
       summarise()
     
     candidate.nodes <- network.nodes %>%
@@ -58,14 +57,14 @@ addLocation <- function(failed.addresses,
   
   # report progress
   print(paste(Sys.time(), "| > Looking for", destination.type, "location for",
-              nrow(failed.addresses), "dwellings for centre no", NAC$CENTRE_NO))
+              nrow(failed.addresses), "dwellings for centre no", AC$CENTRE_NO))
 
-# # sample plot - adjust XX wherever appears
+# sample plot - adjust XX wherever appears
 # outputXX <- ggplot() +
-#   geom_sf(data = NAC.addresses, colour = "blue") +
+#   geom_sf(data = AC.addresses, colour = "blue") +
 #   geom_sf(data = failed.addresses, colour = "red") +
 #   geom_sf(data = destination.locations %>%
-#             st_filter(NAC.addresses %>% st_buffer(., 400), .predicate = st_intersects),
+#             st_filter(AC.addresses %>% st_buffer(., 400), .predicate = st_intersects),
 #           colour = "black", shape = 15, size = 4) +
 #   geom_sf(data = new.locations, colour = "black", shape = 1, size = 10, stroke = 2, fill = NA) +
 #   theme_minimal() +  # Use a minimal theme
@@ -74,7 +73,7 @@ addLocation <- function(failed.addresses,
 #         axis.text = element_blank(),     # Remove axis text
 #         panel.border = element_blank(),  # Remove panel border
 #         plot.margin = margin(0, 0, 0, 0)) # Remove plot margin
-# 
+
 # ggsave("./images/outputsketchXX.png", plot = outputXX, width = 20, height = 20, units = "cm")
 # 
 
@@ -103,7 +102,7 @@ addLocation <- function(failed.addresses,
   candidate.address.no <- apply(address.dist %>%
                                 dplyr::select(-id, -address.n.node), 
                               2, 
-                              function(x) sum(x <= required.dist, na.rm = TRUE)) %>%
+                              function(x) sum(x <= required.dist[1], na.rm = TRUE)) %>%
     as.data.frame() %>%
     cbind(candidate.node = as.numeric(row.names(.))) %>%
     rename("no.of.addresses" = ".")
@@ -119,7 +118,7 @@ addLocation <- function(failed.addresses,
   # -----------------------------------#
   if (max.addresses == 0) {
     # use periphery nodes, and re-find max.addresses
-    search.area <- st_buffer(failed.addresses, required.dist) %>% 
+    search.area <- st_buffer(failed.addresses, required.dist[1]) %>% 
       summarise()
     
     candidate.nodes <- network.nodes %>%
@@ -147,7 +146,7 @@ addLocation <- function(failed.addresses,
     candidate.address.no <- apply(address.dist %>%
                                     dplyr::select(-id, -address.n.node), 
                                   2, 
-                                  function(x) sum(x <= required.dist, na.rm = TRUE)) %>%
+                                  function(x) sum(x <= required.dist[1], na.rm = TRUE)) %>%
       as.data.frame() %>%
       cbind(candidate.node = as.numeric(row.names(.))) %>%
       rename("no.of.addresses" = ".")
@@ -193,7 +192,7 @@ addLocation <- function(failed.addresses,
   
   # report progress
   print(paste(Sys.time(), "| > Found", destination.type, "location for",
-              max.addresses, "dwellings for centre no", NAC$CENTRE_NO))
+              max.addresses, "dwellings for centre no", AC$CENTRE_NO))
   
   # construct new location
   # -----------------------------------#
@@ -203,29 +202,30 @@ addLocation <- function(failed.addresses,
     # ensure geometry column name is consistent
     st_set_geometry("GEOMETRY") %>%
     # add centre no and destination type columns (and drop the rest)
-    mutate(centre_no = NAC$CENTRE_NO,
+    mutate(centre_no = AC$CENTRE_NO,
            dest_type = case_when(
-             destination.type == "restaurant_cafe" ~ "cafe",  # AND PERHAPS FOR OTHERS, EG BUS
+             destination.type == "restaurant_cafe" ~ "cafe",
+             destination.type == "community_centre_library" ~ "community_centre",
              TRUE ~ destination.type
            )) %>%
     dplyr::select(centre_no, dest_type)
   
-  # if district sport or park, buffer to create polygon
-  if (destination.type == "district_sport") {
+  # if park, buffer to create polygon
+  if (destination.type == "park") {
     
-    # buffer to 5 ha
-    new.location <- st_buffer(new.location,  sqrt(50000 / pi))
+    # buffer to 0.4ha - lower bound of 'local park' in 
+    # see https://auo.org.au/portal/metadata/access-to-areas-of-public-open-space/,
+    # and see K. Villanueva, H. Badland, P. Hooper, M. J. Koohsari, S. Mavoa, M. Davern, et al.
+    # Developing indicators of public open space to promote health and wellbeing in communities,
+    # Applied Geography 2015 Vol. 57 Pages 112-119, Table 1 esp comments at item 8
     
-  } else if (destination.type == "park") {
-    
-    # buffer to nominal 20m
-    new.location <- st_buffer(new.location, 20)
+    new.location <- st_buffer(new.location,  sqrt(4000 / pi))
   
   }
   
-  # if district sport or park, find entry nodes for new location (otherwise,
+  # if park, find entry nodes for new location (otherwise,
   # entry nodes are not required so are set to empty vector)
-  if (destination.type %in% c("district_sport", "park")) {
+  if (destination.type == "park") {
     new.entry.nodes <- findEntryNodes(destination.type,
                                       new.location,
                                       network.nodes,

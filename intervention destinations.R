@@ -1,24 +1,24 @@
-# add destinations to NACs for 20 minute neighbourhood intervention
+# add destinations to ACs for 20 minute neighbourhood intervention
 
 #------------------------------------------------------------------------------#
 # Process ----
-# •	For each destination type, identify the NACs that failed the test.
-# •	‘Fail the test’ means that 80% of dwellings in a NAC are not within the 
+# •	For each destination type, identify the ACs that failed the test.
+# •	‘Fail the test’ means that 80% of dwellings in an AC are not within the 
 #    required walking distance (400m, 600m or 800m as applicable) of the 
 #    relevant destination type.
-# •	Order the failed NACs.  
+# •	Order the failed ACs.  
 #   o	For destinations where 400m walking distance is required (restaurant_cafe, 
-#     bus, convenience_store, park, gp), order small to large: a large NAC 
-#     should be made up of small NACs, each of which contains these, so fill out 
-#     the small NACs first.  For the 800m destinations, order large to small: a 
-#     large NAC should contain these, so they are accessible to small NACs within it.  
+#     bus, convenience_store, park, gp), order small to large: a large AC 
+#     should be made up of small ACs, each of which contains these, so fill out 
+#     the small ACs first.  For the 800m destinations, order large to small: a 
+#     large AC should contain these, so they are accessible to small ACs within it.  
 #   o	Within each size category, order by neediest first, with the aim of 
-#     maximising the possibility of a new destination also helping other NACs 
+#     maximising the possibility of a new destination also helping other ACs 
 #     pass the test. ‘Neediest’ is lowest percentage of dwellings within the 
 #     required distance and, in case of equality, highest number of dwellings.
-# •	For each ‘failed NAC’:
-#   o	Test whether the NAC now passes the test, taking account of any new 
-#     destinations that may already have been added (functions/testFailedNac.R). 
+# •	For each ‘failed AC’:
+#   o	Test whether the AC now passes the test, taking account of any new 
+#     destinations that may already have been added (functions/testFailedAc.R). 
 #   o	If it fails the test, identify the ‘failed addresses’ that are not within 
 #     the required distance.  Add a new location at the node which maximises the 
 #     number of failed addresses that are now reachable within the required distance 
@@ -26,13 +26,13 @@
 #     minimises the sum of the distances for all failed addresses (functions/addLocation.R).  
 #     Re-test, and continue adding locations until the test is met.
 #   o	When searching for the best location node, candidate nodes are:
-#     	for supermarket, butcher, bakery, pharmacy or post for all NACs; or 
-#       for restaurant_cafe or convenience_store for small NACs only – nodes 
-#       on links that are within 30m of the NAC (ie the core); or
+#     	for supermarket, butcher, bakery, pharmacy or post for all ACs; or 
+#       for restaurant_cafe or convenience_store for small ACs only – nodes 
+#       on links that are within 30m of the AC (ie the core); or
 #     	otherwise – nodes within 400m (restaurant_cafe, bus, convenience_store, 
-#       park, gp) or 800m (otherwise) of the failed addresses.
+#       park) or 800m (otherwise) of the failed addresses.
 #   o	Include any added locations in the dataframe of new destinations, which 
-#     are used when re-testing the current NAC and testing further NACs. 
+#     are used when re-testing the current AC and testing further ACs. 
 #------------------------------------------------------------------------------#
 
 
@@ -50,14 +50,14 @@ library(ggplot2)  # testing only
 
 ## 1.2 Functions ----
 ## ------------------------------------#
-dir_walk(path="./functions/",source, recurse=T, type = "file")
+dir_walk(path = "./functions/", source, recurse = T, type = "file")
 
 
 ## 1.3 Parameters ----
 ## ------------------------------------#
 PROJECT.CRS <- 28355
-BUFFDIST.SMALL <- 400  # distance to buffer small NACs
-BUFFDIST.MED.LARGE <- 800  # distance to buffer medium and large NACs
+BUFFDIST.SMALL <- 400  # distance to buffer small ACs
+BUFFDIST.MED.LARGE <- 800  # distance to buffer medium and large ACs
 
 
 ## 1.4 Data ----
@@ -66,8 +66,8 @@ BUFFDIST.MED.LARGE <- 800  # distance to buffer medium and large NACs
 # Note that much of the data loading is (and needs to be) the same as in 
 # baseline.R
 
-# neighbourhood activity centres
-NACs <- read_zipped_GIS(zipfile = "../data/original/MICLUP-NACs.zip",
+# activity centres
+ACs <- read_zipped_GIS(zipfile = "../data/original/MICLUP-NACs.zip",
                         file = "/MICLUP_COMMERCIAL_EXT_JUN2020.shp") %>%
   st_transform(PROJECT.CRS) %>%
   mutate(size = case_when(
@@ -78,13 +78,13 @@ NACs <- read_zipped_GIS(zipfile = "../data/original/MICLUP-NACs.zip",
   dplyr::select(-Shape_Leng, -Shape_Area)
 
 
-# NAC catchment addresses
-nac.catchment.address.location <- "./output/nac_catchment_addresses.rds"
-nac.catchment.addresses <- readRDS(nac.catchment.address.location)
+# AC catchment addresses
+ac.catchment.address.location <- "./output/ac_catchment_addresses.rds"
+ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 
 
-# baseline NAC coverage
-baseline.NAC.coverage <- read.csv("./output/20mn baseline NAC coverage.csv")
+# baseline AC coverage
+baseline.AC.coverage <- read.csv("./output/20mn baseline AC coverage.csv")
 
 
 # destinations
@@ -93,9 +93,6 @@ ANLS.pos.location <-
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
 ANLS.dest.location <- 
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
-temp_osm_2023.location <- "../data/processed/temp_osm_2023.sqlite"
-community.centre.location <- "../data/processed/community_centre.sqlite"
-community.health.location <- "../data/processed/community_health.sqlite"
 
 region_buffer <- st_read("../data/processed/region_buffer.sqlite")
 
@@ -103,10 +100,8 @@ region_buffer <- st_read("../data/processed/region_buffer.sqlite")
 # types', and (2) a dataframe (sf object) for each destination type, based on 
 # input files 'POIs', 'ANLS.pos', 'ANLS.dest' etc
 baseline.destinations <- loadBaselineDestinations(POIs.location, 
+                                                  ANLS.dest.location,
                                                   ANLS.pos.location,
-                                                  temp_osm_2023.location,
-                                                  community.centre.location,
-                                                  community.health.location,
                                                   region_buffer)
 
 destination.types <- baseline.destinations[[1]]
@@ -172,11 +167,11 @@ intervention.location <- "./output/intervention locations.sqlite"
 # 2 Add new destination locations ----
 # -----------------------------------------------------------------------------#
 
-for (i in 1:length(destination.types)) {
-# for (i in 2:4) { ## bus, tram, train
-# for (i in 13:15) {  ## community_centre, childcare, kindergarten
+# for (i in 1:length(destination.types)) {
+# for (i in 2:4) { 
+for (i in c(1, 14, 13)) {
   
-  # set up destination type and failed NACs
+  # set up destination type and failed ACs
   # -----------------------------------#
   # destination type
   destination.type <- destination.types[i]
@@ -216,38 +211,28 @@ for (i in 1:length(destination.types)) {
                   st_set_geometry("GEOMETRY"),
                 # plus intervention supermarkets
                 st_read(intervention.location, layer = "supermarket"))
-  } else if (destination.type == "park") {  # FOR NOW - BUT MAYBE park BEFORE district_sport, AND THEN JUST FIND park LOCATIONS FOR dist_sport, NOT NEW
-    baseline.locations <-
-      baseline.locations <- 
-      bind_rows(baseline.locations, 
-                # plus intervention district sport (not baseline district sport, because they are already 'parks')
-                st_read(intervention.location, layer = "district_sport"))
-  } 
+  }
   
   # field for the relevant destination
   destination.field <- case_when(
-    destination.type == "restaurant_cafe" ~ "rest.cafe.400",
-    destination.type == "bus" ~ "bus.400.tram.600.train.800",  ## CONSIDER PT FURTHER
     destination.type == "supermarket"  ~ "supermarket.800",
     destination.type == "convenience_store" ~ "convenience.400",
-    destination.type == "butcher" ~ "butcher.800",
-    destination.type == "bakery" ~ "bakery.800",
+    destination.type == "restaurant_cafe" ~ "rest.cafe.400",
     destination.type == "pharmacy" ~ "pharmacy.800",
     destination.type == "post" ~ "post.800",
-    destination.type == "district_sport" ~ "distsport.800",
-    destination.type == "park" ~ "park.400",
-    destination.type == "community_centre" ~ "comm.ctr.800",
+    destination.type == "gp" ~ "gp.800",
+    destination.type == "maternal_child_health" ~ "mat.child.health.800",
+    destination.type == "dentist" ~ "dentist.800",
     destination.type == "childcare" ~ "childcare.800",
     destination.type == "kindergarten" ~ "kindergarten.800",
     destination.type == "primary" ~ "primary.800",
-    destination.type == "community_health" ~ "comm.health.800",
-    destination.type == "maternal_child_health" ~ "mat.child.health.800",
-    destination.type == "gp" ~ "gp.400",
-    destination.type == "dentist" ~ "dentist.800"
+    destination.type == "community_centre_library" ~ "comm.library.800",
+    destination.type == "park" ~ "park.400",
+    destination.type == "bus" ~ "bus.400.tram.600.train.800"
   )
   
   # required distance for 80% of addresses
-  if (destination.type %in% c("restaurant_cafe", "convenience_store", "park", "gp")) {
+  if (destination.type %in% c("convenience_store", "restaurant_cafe", "park")) {
     required.dist <- 400
   } else if (destination.type == "bus") {
     required.dist <- c(400, 600, 800)
@@ -255,17 +240,17 @@ for (i in 1:length(destination.types)) {
     required.dist <- 800
   }
 
-  # find NACs that failed the 80% test in baseline
-  failed.NACs <- baseline.NAC.coverage %>%
+  # find ACs that failed the 80% test in baseline
+  failed.ACs <- baseline.AC.coverage %>%
     dplyr::select(centre_no, size, !!destination.field) %>%
     filter(get(destination.field) < 80)
 
-  # order failed NACs  - small to large for 400m walk dist, or large to small
+  # order failed ACs  - small to large for 400m walk dist, or large to small
   # for 800; then order by  neediest (lowest percentage; if equality then highest 
   # number of addresses)
-  failed.NACs.with.details <- failed.NACs %>%
+  failed.ACs.with.details <- failed.ACs %>%
     # add number of addresses
-    left_join(nac.catchment.addresses, by = c("centre_no" = "CENTRE_NO")) %>%
+    left_join(ac.catchment.addresses, by = c("centre_no" = "CENTRE_NO")) %>%
     rowwise() %>%
     mutate(no.addresses = length(unlist(address_ids))) %>%
     ungroup() %>%
@@ -273,20 +258,18 @@ for (i in 1:length(destination.types)) {
     dplyr::select(-address_ids) %>%
     mutate(size = factor(size, levels = c("small", "medium", "large")))
   
-  if (destination.type %in% c("restaurant_cafe", "bus", "convenience_store",
-                              "park", "gp")) {
-    failed.NACs.ordered <- failed.NACs.with.details %>%
+  if (destination.type %in% c("convenience_store", "restaurant_cafe", "park", "bus")) {
+    failed.ACs.ordered <- failed.ACs.with.details %>%
       # small to large, then neediest
       arrange(size, get(destination.field), desc(no.addresses))
   }  else {
-    failed.NACs.ordered <- failed.NACs.with.details %>%
+    failed.ACs.ordered <- failed.ACs.with.details %>%
       # large to small, then neediest
       arrange(desc(size), get(destination.field), desc(no.addresses))
   }
   
-  # for district sport and park (polygons), find entry nodes for baseline
-  # locations (see findEntryNodes.R for details)
-  if (destination.type %in% c("district_sport", "park")) {
+  # for park (polygons), find entry nodes for baseline locations (see findEntryNodes.R for details)
+  if (destination.type == "park") {
     entry.nodes <- findEntryNodes(destination.type,
                                   baseline.locations,
                                   network.nodes,
@@ -296,66 +279,66 @@ for (i in 1:length(destination.types)) {
   }
 
 
-  # loop through failed NACs and add locations as required
+  # loop through failed ACs and add locations as required
   # ---------------------------------#
   
   # report progress
   print(paste(Sys.time(), "| Finding new", destination.type, "locations for",
-              nrow(failed.NACs), "neighbourhood activity centres"))
+              nrow(failed.ACs), "neighbourhood activity centres"))
   
   # empty vector to hold new destinations that are added in the loop
   new.locations <- c()
   
   # loop to test and add locations
-  for (j in 1:nrow(failed.NACs.ordered)) {
+  for (j in 1:nrow(failed.ACs.ordered)) {
     
-    # set up destinations and NAC 
+    # set up destinations and AC 
     # ---------------------------------#
     
     # destinations, including any new
     destination.locations <- bind_rows(baseline.locations,
                                        new.locations)
     
-    # failed nac (centre no and size, not the geometry)
-    failed.NAC <- failed.NACs.ordered[j, ]
+    # failed ac (centre no and size, not the geometry)
+    failed.AC <- failed.ACs.ordered[j, ]
     
-    # NAC (with geometry)
-    NAC <- NACs %>%
-      filter(CENTRE_NO == failed.NAC$centre_no)
+    # AC (with geometry)
+    AC <- ACs %>%
+      filter(CENTRE_NO == failed.AC$centre_no)
     
-    # residential addresses for the NAC
-    NAC.address.ids <- nac.catchment.addresses %>%
-      filter(CENTRE_NO == failed.NAC$centre_no) %>%
+    # residential addresses for the AC
+    AC.address.ids <- ac.catchment.addresses %>%
+      filter(CENTRE_NO == failed.AC$centre_no) %>%
       .$address_ids %>%
       unlist()
     
-    NAC.addresses <- residential.addresses %>%
-      filter(id %in% NAC.address.ids)
+    AC.addresses <- residential.addresses %>%
+      filter(id %in% AC.address.ids)
     
     
     # initial test 
     # -------------------------------#
     
     # test that it's still failed (could be fixed by previous new locations)
-    test.outputs <- testFailedNac(NAC.addresses,
-                                  destination.type,
-                                  destination.locations,
-                                  network.nodes,
-                                  network.links,
-                                  g,
-                                  required.dist,
-                                  entry.nodes)
+    test.outputs <- testFailedAc(AC.addresses,
+                                 destination.type,
+                                 destination.locations,
+                                 network.nodes,
+                                 network.links,
+                                 g,
+                                 required.dist,
+                                 entry.nodes)
     
     test.result <- test.outputs[[1]]
     failed.addresses <- test.outputs[[2]]
     
     # report progress
     if (test.result) {
-      print(paste0(Sys.time(), " | Test passed for centre no ", failed.NAC$centre_no, 
-                  " (", j, " of ", nrow(failed.NACs.ordered), ")"))
+      print(paste0(Sys.time(), " | Test passed for centre no ", failed.AC$centre_no, 
+                  " (", j, " of ", nrow(failed.ACs.ordered), ")"))
     } else {
-      print(paste0(Sys.time(), " | Test failed for centre no ", failed.NAC$centre_no, 
-                   " (", j, " of ", nrow(failed.NACs.ordered),
+      print(paste0(Sys.time(), " | Test failed for centre no ", failed.AC$centre_no, 
+                   " (", j, " of ", nrow(failed.ACs.ordered),
                    "): needs new ", destination.type, "(s)"))
     }
     
@@ -363,15 +346,12 @@ for (i in 1:length(destination.types)) {
     # loop to add and re-test 
     # -------------------------------#
     
-    # NOTE - supermarkets don't really test the loop, because at 800m it always
-    # satisfies the test first time
-    
     # if failed, then keep adding locations until the test is passed
     while (!test.result) {
       
       # add a new location
       new.location.outputs <- addLocation(failed.addresses,
-                                          NAC,
+                                          AC,
                                           destination.type,
                                           network.nodes,
                                           network.links,
@@ -382,7 +362,7 @@ for (i in 1:length(destination.types)) {
       
       # add the new location both to both new.locations (the overall
       # list of new locations for the destination type) and
-      # destination.locations (used for re-testing for the specific NAC)
+      # destination.locations (used for re-testing for the specific AC)
       new.locations <- bind_rows(new.locations, new.location)
       destination.locations <- bind_rows(destination.locations, new.location)
       
@@ -391,14 +371,14 @@ for (i in 1:length(destination.types)) {
       entry.nodes <- unique(c(entry.nodes, new.entry.nodes))
       
       # and test again
-      test.outputs <- testFailedNac(NAC.addresses,
-                                    destination.type,
-                                    destination.locations,
-                                    network.nodes,
-                                    network.links,
-                                    g,
-                                    required.dist,
-                                    entry.nodes)
+      test.outputs <- testFailedAc(AC.addresses,
+                                   destination.type,
+                                   destination.locations,
+                                   network.nodes,
+                                   network.links,
+                                   g,
+                                   required.dist,
+                                   entry.nodes)
       
       test.result <- test.outputs[[1]]
       failed.addresses <- test.outputs[[2]]
