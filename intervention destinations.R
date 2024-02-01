@@ -393,3 +393,42 @@ for (i in c(1, 14, 13)) {
 
 }
 
+
+# 3 Summary table of number of new destination locations ----
+# -----------------------------------------------------------------------------#
+# vector of names of all layers
+new.location.layers <- st_layers(intervention.location) %>%
+  .$name
+
+# empty dataframe to hold locations
+new.locations <- c()
+
+# add each layer to the empty dataframe
+for (i in 1:length(new.location.layers)) {
+  # read in the layer
+  assign(new.location.layers[i], st_read(intervention.location,
+                                         layer = new.location.layers[i]))
+  # layer without geometry
+  layer.locations <- get(new.location.layers[i]) %>%
+    st_drop_geometry()
+  # add to the dataframe
+  new.locations <- bind_rows(new.locations, layer.locations)
+}
+
+
+summary <- new.locations %>%
+  # numebr of each destination type
+  group_by(dest_type) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  # desired order
+  mutate(dest_type = factor(dest_type, 
+                            levels = c("supermarket", "pharmacy", "post", "gp",
+                                       "maternal_child_health", "dentist",
+                                       "childcare", "kindergarten", "primary", 
+                                       "community_centre", "convenience_store", 
+                                       "cafe", "park", "bus"))) %>%
+  arrange(dest_type)
+
+# write output
+write.csv(summary, "./output/20mn intervention location summary.csv", row.names = FALSE)

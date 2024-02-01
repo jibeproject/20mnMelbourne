@@ -65,6 +65,13 @@
 #   and small ACs with 80% of residences with access to each destination type 
 #   within specified distance (section 5.3 and functions/calculateAcCoverageSummary.R).  
 #   Output saved as output /20mn baseline AC coverage summary.csv.
+# • Make boxplots investigating small ACs:
+#   o	allocates a score, with 1 point for each of the 14 destination tests
+#   o	makes boxplot for the score for each of large, medium, small (2-5k) and 
+#     small (<2k), showing the score
+#   o	divides small according to whether under or over 50% overlap with 
+#     medium/large, and makes a second similar boxplot for them 
+#   Outputs saved as images/baseline_score.png and images/overlap_score.png
 
 #------------------------------------------------------------------------------#
 
@@ -78,11 +85,13 @@ library(fs)
 library(sf)
 library(igraph)
 library(lwgeom)  # used in densifySubNetwork
+library(ggplot2)
+library(stringr)
 library(doSNOW)
 library(parallel)
 library(foreach)
 
-library(ggplot2)  # testing only
+options(scipen = 999)
 
 
 ## 1.2 Functions ----
@@ -364,3 +373,152 @@ baseline.AC.coverage.summary <-
 write.csv(baseline.AC.coverage.summary, 
           "./output/20mn baseline AC coverage summary.csv")
 
+
+# 6 Small AC investigation ----
+# -----------------------------------------------------------------------------#
+
+## 6.1 Load required data ----
+## -------------------------------------#
+# baseline performance against destination tests, by AC
+baseline.AC.coverage <- read.csv("./output/20mn baseline AC coverage.csv")
+
+# AC catchments
+ac.catchments <- readRDS(ac.catchment.address.location)
+
+
+## 6.2 Allocate score ----
+## -------------------------------------#
+baseline.score <- baseline.AC.coverage %>%
+  
+  # add score, out of 14 (one for each test)
+  mutate(score = as.integer(supermarket.800 >= 80) +
+           as.integer(pharmacy.800 >= 80) +
+           as.integer(pharmacy.800 >= 80) +
+           as.integer(post.800 >= 80) +
+           as.integer(gp.800 >= 80) +
+           as.integer(mat.child.health.800 >= 80) +
+           as.integer(dentist.800 >= 80) +
+           as.integer(childcare.800 >= 80) +
+           as.integer(kindergarten.800 >= 80) +
+           as.integer(primary.800 >= 80) +
+           as.integer(comm.library.800 >= 80) +
+           as.integer(convenience.400 >= 80) +
+           as.integer(rest.cafe.400 >= 80) +
+           as.integer(park.400 >= 80) +
+           as.integer(bus.400.tram.600.train.800 >= 80)
+  ) %>%
+  
+  # divide small category into two
+  left_join(ACs %>% dplyr::select(centre_no = CENTRE_NO, CENTRESIZE), by = "centre_no") %>%
+  mutate(category = as.factor(case_when(
+    size == "small" & CENTRESIZE == "2000 to 5000"   ~ "small 2-5k",
+    size == "small" & CENTRESIZE == "Less than 2000" ~ "small <2k",
+    TRUE ~ size
+  ))) %>%
+  # reorder the levels of the 'score' factor
+  mutate(category = factor(category, 
+                           levels = c("small <2k", "small 2-5k", "medium", "large")))
+
+## 6.3 Boxplot for score ----
+## -------------------------------------#
+# calculate counts for each category
+category.counts <- baseline.score %>%
+  count(category)
+
+# create the boxplot and add counts
+score.plot <- ggplot(data = baseline.score, aes(x = category, y = score)) +
+  # geom_jitter(position = position_jitter(width = 0.1), alpha = 0.2, colour = "blue") + 
+  geom_boxplot() +
+  labs(title = "Distribution of scores by Activity Centre size",
+       x = "Activity Centre size (with number of centres)",
+       y = "Score: no of destination targets met (max 14)") +
+  scale_x_discrete(labels = paste0(category.counts$category, " (", category.counts$n, ")")) +
+  theme_classic()
+
+# save
+ggsave("./images/baseline_score.png", score.plot, width = 15, height = 12, units = "cm")
+
+# means
+means <- baseline.score %>%
+  group_by(category) %>%
+  summarise(mean = mean(score))
+means
+# category    mean
+# <fct>      <dbl>
+# 1 small <2k   4.63
+# 2 small 2-5k  6.34
+# 3 medium      5.61
+# 4 large       6.31
+
+
+## 6.4 Allocate overlap ----
+## -------------------------------------#
+# join ac.catchments to details from baseline scores
+catchments <- ac.catchments %>%
+  rename(centre_no = CENTRE_NO) %>%
+  left_join(baseline.score %>% 
+              st_drop_geometry() %>%
+              dplyr::select(centre_no, size, category, score), 
+            by = "centre_no")
+
+# address id's for medium and large ACs
+medium.large <- c()
+for (i in 1:nrow(catchments)) {
+  if (catchments$size[i] %in% c("medium", "large")) {
+    medium.large <- c(medium.large, unlist(catchments$address_ids[i]))
+  }
+}
+medium.large <- medium.large %>% unique() %>% sort()
+
+# overlap percentage for small, based on number of address id's that are also in medium.large
+small.acs <- catchments %>%
+  filter(size == "small")
+
+for (i in 1:nrow(small.acs)) {
+  ac.addresses <- unlist(small.acs$address_ids[i])
+  overlap.addresses <- ac.addresses[(ac.addresses %in% medium.large)]
+  small.acs$overlap.pct[i] <- length(overlap.addresses) / length(ac.addresses) * 100
+}
+
+# add overlap categories and groups
+small.acs.with.groups <- small.acs %>%
+  mutate(overlap.category = case_when(overlap.pct >= 50 ~ "large",
+                                      TRUE    ~ "small"),
+         group = paste0(category, ", ", overlap.category, " overlap"))
+
+
+## 6.5 Boxplot for overlap score ----
+## -------------------------------------#
+# calculate counts for each category
+group.counts <- small.acs.with.groups %>%
+  count(group)
+
+# create the boxplot and add counts
+overlap.score.plot <- ggplot(data = small.acs.with.groups, aes(x = group, y = score)) +
+  # geom_jitter(position = position_jitter(width = 0.1), alpha = 0.2, colour = "blue") + 
+  geom_boxplot() +
+  labs(title = "Distribution of scores by small Activity Centre overlap group",
+       x = "Activity Centre overlap category (with number of centres)",
+       y = "Score: no of destination targets met (max 14)",
+       caption = "'Large overlap' means 50% or more of the dwellings in the small AC are also in a\n large or medium AC; small overlap means less than 50%.") +
+  scale_x_discrete(labels = function(x) str_wrap(paste0(x, " (", group.counts$n, ")"), width = 15)) +
+  # scale_x_discrete(labels = paste0(group.counts$group, " (", group.counts$n, ")")) +
+  theme_classic() +
+  theme(plot.caption = element_text(hjust = 0))  #  left alignment
+
+
+# save
+ggsave("./images/overlap_score.png", overlap.score.plot, width = 15, height = 12, units = "cm")
+
+
+# means
+means.overlap <- small.acs.with.groups %>%
+  group_by(group) %>%
+  summarise(mean = mean(score))
+means.overlap
+# group                      mean
+# <chr>                     <dbl>
+# 1 small <2k, large overlap   6.52
+# 2 small <2k, small overlap   4.33
+# 3 small 2-5k, large overlap  7.11
+# 4 small 2-5k, small overlap  6.21
