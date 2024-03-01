@@ -126,22 +126,29 @@ region_buffer <- st_read("../data/processed/region_buffer.sqlite")
 # load network, and filter to region buffer
 links <- st_read("../data/processed/edgesMelbourne.gpkg") %>%
   st_filter(region_buffer, .predicate = st_intersects) %>%
-  # filter to walkable only
-  filter(is_walk == TRUE) %>%
   # tidy names to those expected by functions
   rename(from_id = from, to_id = to, id = edgeID, GEOMETRY = geom)
 
 nodes <- st_read("../data/processed/nodesMelbourne.gpkg") %>%
-  # only those used in links
-  filter(nodeID %in% links$from_id | nodeID %in% links$to_id) %>%
   # tidy names to those expected by functions
   rename(id = nodeID, GEOMETRY = geom) %>%
   mutate(x = st_coordinates(GEOMETRY)[,1], y = st_coordinates(GEOMETRY)[,2])
 
-# keep just the largest connected network
-network <- largestConnectedComponent(nodes, links)
+links.walk <- links %>% filter(is_walk == TRUE)
+nodes.walk <- nodes %>% filter(id %in% links.walk$from_id | id %in% links.walk$to_id)
+
+links.cycle <- links %>% filter(is_cycle == TRUE)
+nodes.cycle <- nodes %>% filter(id %in% links.cycle$from_id | id %in% links.cycle$to_id)
+
+# keep just the largest connected networks ('network' is walking; 'network.cycle' is cycling)
+network <- largestConnectedComponent(nodes.walk, links.walk)
 network.nodes <- network[[1]]
 network.links <- network[[2]]
+
+network.cycle <- largestConnectedComponent(nodes.cycle, links.cycle)
+network.nodes.cycle <- network.cycle[[1]]
+network.links.cycle <- network.cycle[[2]]
+
 
 # address and region data locations
 address.location <- "../data/original/VIC_ADDRESS_DEFAULT_GEOCODE_psv.psv"
@@ -204,6 +211,10 @@ if (find.residential.addresses) {
     dplyr::select(id) %>%
     # add nearest network node (note: this is walking network)
     mutate(address.n.node = network.nodes$id[st_nearest_feature(., network.nodes)])
+  
+  # add nearest cycling nodes
+  residential.addresses <- residential.addresses %>%
+    mutate(cycle.node = network.nodes.cycle$id[st_nearest_feature(., network.nodes.cycle)])
   
   # write output
   st_write(residential.addresses, residential.address.location, 

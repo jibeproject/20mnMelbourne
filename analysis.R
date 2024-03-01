@@ -240,14 +240,14 @@ write.csv(baseline.cycle.scores %>%
 
 ## 2.3 Aggregate scores for LGAs ----
 ## ------------------------------------#
-# walk
-addresses.with.LGA.walk <- residential.addresses %>%
+addresses.with.LGA <- residential.addresses %>%
   st_join(., LGAs %>% dplyr::select(NAME), .predicate = st_intersects) %>%
   mutate(LGA = case_when(NAME == "MERRI-BEK" ~ "Merri-bek",
-                          TRUE ~ str_to_title(NAME))) %>%
+                         TRUE ~ str_to_title(NAME))) %>%
   st_drop_geometry()
 
-address.scores.walk <- addresses.with.LGA.walk %>%
+# walk
+address.scores.walk <- addresses.with.LGA %>%
   # join the scores
   left_join(baseline.walk.scores, 
             by = c("address.n.node" = "node_id")) %>%
@@ -261,22 +261,12 @@ LGA.scores.walk <- calculateLgaAccessibilityScores(address.scores.walk)
 write.csv(LGA.scores.walk, "./output/LGA accessibility scores walk.csv", row.names = F)
 
 # cycle
-addresses.with.LGA.cycle <- residential.addresses %>%
-  # replace the nearest nodes (which were calculated in baseline.R for the walking 
-  # network) with the nearest nodes on the cycling network
-  mutate(address.n.node = 
-           network.nodes.cycle$id[st_nearest_feature(., network.nodes.cycle)]) %>%
-  st_join(., LGAs %>% dplyr::select(NAME), .predicate = st_intersects) %>%
-  mutate(LGA = case_when(NAME == "MERRI-BEK" ~ "Merri-bek",
-                         TRUE ~ str_to_title(NAME))) %>%
-  st_drop_geometry()
-
-address.scores.cycle <- addresses.with.LGA.cycle %>%
+address.scores.cycle <- addresses.with.LGA %>%
   # join the scores
   left_join(baseline.cycle.scores, 
-            by = c("address.n.node" = "node_id")) %>%
+            by = c("cycle.node" = "node_id")) %>%
   left_join(intervention.cycle.scores, 
-            by = c("address.n.node" = "node_id"),
+            by = c("cycle.node" = "node_id"),
             suffix = c("_base", "_int"))
 
 LGA.scores.cycle <- calculateLgaAccessibilityScores(address.scores.cycle)
