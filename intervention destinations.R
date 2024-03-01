@@ -102,30 +102,13 @@ region_buffer <- st_read("../data/processed/region_buffer.sqlite")
 baseline.destinations <- loadBaselineDestinations(POIs.location, 
                                                   ANLS.dest.location,
                                                   ANLS.pos.location,
-                                                  region_buffer)
+                                                  region_buffer,
+                                                  PROJECT.CRS)
 
 destination.types <- baseline.destinations[[1]]
 
 
-# network
-
-# # load 'sqlite' network, and filter to region buffer  
-# links <- st_read("../data/processed/network.sqlite", layer = "links") %>%
-#   st_filter(region_buffer, .predicate = st_intersects) %>%
-#   # filter to walkable only
-#   filter(is_walk == 1) %>%
-#   # correct required fields to integer
-#   mutate(from_id = as.integer(from_id),
-#          to_id = as.integer(to_id),
-#          id = as.integer(id))
-# nodes <- st_read("../data/processed/network.sqlite", layer = "nodes") %>%
-#   # only those used in links
-#   filter(id %in% links$from_id | id %in% links$to_id) %>%
-#   # correct required fields to integer
-#   mutate(id = as.integer(id))
-
-
-# load 'gpkg' network, and filter to region buffer
+# load  network, and filter to region buffer
 links <- st_read("../data/processed/edgesMelbourne.gpkg") %>%
   st_filter(region_buffer, .predicate = st_intersects) %>%
   # filter to walkable only
@@ -156,9 +139,7 @@ g <- graph_from_data_frame(g.links, directed = F)
 
 # residential addresses
 residential.address.location <- "./output/residential_addresses.sqlite"
-residential.addresses <- st_read(residential.address.location) %>%
-  mutate(address.n.node = network.nodes$id[st_nearest_feature(., network.nodes)])
-
+residential.addresses <- st_read(residential.address.location)
 
 # intervention location
 intervention.location <- "./output/intervention locations.sqlite"
@@ -167,9 +148,9 @@ intervention.location <- "./output/intervention locations.sqlite"
 # 2 Add new destination locations ----
 # -----------------------------------------------------------------------------#
 
-# for (i in 1:length(destination.types)) {
+for (i in 1:length(destination.types)) {
 # for (i in 2:4) { 
-for (i in c(1, 14, 13)) {
+# for (i in c(1, 14, 13)) {
   
   # set up destination type and failed ACs
   # -----------------------------------#
@@ -270,10 +251,12 @@ for (i in c(1, 14, 13)) {
   
   # for park (polygons), find entry nodes for baseline locations (see findEntryNodes.R for details)
   if (destination.type == "park") {
+    buffered.links <- st_buffer(network.links, 30)
+    
     entry.nodes <- findEntryNodes(destination.type,
                                   baseline.locations,
                                   network.nodes,
-                                  network.links)
+                                  buffered.links)
   } else {
     entry.nodes <- c()
   }
@@ -291,6 +274,7 @@ for (i in c(1, 14, 13)) {
   
   # loop to test and add locations
   for (j in 1:nrow(failed.ACs.ordered)) {
+  # for (j in 1:10) {
     
     # set up destinations and AC 
     # ---------------------------------#
@@ -355,6 +339,7 @@ for (i in c(1, 14, 13)) {
                                           destination.type,
                                           network.nodes,
                                           network.links,
+                                          buffered.links,
                                           g,
                                           required.dist)
       new.location <- new.location.outputs[[1]]

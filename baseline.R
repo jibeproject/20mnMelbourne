@@ -123,24 +123,7 @@ ACs <- read_zipped_GIS(zipfile = "../data/original/MICLUP-NACs.zip",
 # region buffer
 region_buffer <- st_read("../data/processed/region_buffer.sqlite")
 
-# network
-# # load 'sqlite' network, and filter to region buffer  
-# links <- st_read("../data/processed/network.sqlite", layer = "links") %>%
-#   st_filter(region_buffer, .predicate = st_intersects) %>%
-#   # filter to walkable only
-#   filter(is_walk == 1) %>%
-#   # correct required fields to integer
-#   mutate(from_id = as.integer(from_id),
-#          to_id = as.integer(to_id),
-#          id = as.integer(id))
-# nodes <- st_read("../data/processed/network.sqlite", layer = "nodes") %>%
-#   # only those used in links
-#   filter(id %in% links$from_id | id %in% links$to_id) %>%
-#   # correct required fields to integer
-#   mutate(id = as.integer(id))
-
-
-# load 'gpkg' network, and filter to region buffer
+# load network, and filter to region buffer
 links <- st_read("../data/processed/edgesMelbourne.gpkg") %>%
   st_filter(region_buffer, .predicate = st_intersects) %>%
   # filter to walkable only
@@ -183,7 +166,7 @@ ac.catchment.polygon.location <- "./output/ac_catchment_polygons.sqlite"
 
 # baseline address destination distances: set to F if using existing, or create in section 4
 find.baseline.distances <- F
-baseline.distance.location <- "./output/baseline_distances.csv"
+baseline.node.distance.location <- "./output/node_distances_baseline.csv"
 baseline.distsport.location <- "./output/baseline_distsport_display.sqlite"
 
 # directory for outputs
@@ -209,9 +192,6 @@ if (find.residential.addresses) {
     read_zipped_GIS(zipfile = meshblock.location) %>%
     st_transform(PROJECT.CRS)
   
-  # # region boundary
-  # region_buffer <- st_read(region_buffer.location)
-  
   # find addresses located in study area residential meshblocks
   residential.addresses <- addresses %>%
     # filter to region
@@ -221,7 +201,9 @@ if (find.residential.addresses) {
     filter(MB_CAT16 == "Residential") %>%
     # add id
     mutate(id = row_number()) %>%
-    dplyr::select(id)
+    dplyr::select(id) %>%
+    # add nearest network node (note: this is walking network)
+    mutate(address.n.node = network.nodes$id[st_nearest_feature(., network.nodes)])
   
   # write output
   st_write(residential.addresses, residential.address.location, 
@@ -280,7 +262,7 @@ if (make.AC.catchments) {
 
 
 
-# 4 Distances between addresses and existing destinations ----
+# 4 Distances between address nodes and existing destinations ----
 # -----------------------------------------------------------------------------#
 # find baseline address destination distances
 if (find.baseline.distances) {
@@ -294,17 +276,21 @@ if (find.baseline.distances) {
   baseline.destinations <- loadBaselineDestinations(POIs.location, 
                                                     ANLS.dest.location,
                                                     ANLS.pos.location,
-                                                    region_buffer)
-  
-  # find the distances
-  baseline.distances <- addressDestinationDistances(baseline.destinations,
-                                                    residential.addresses,
-                                                    network.nodes,
-                                                    network.links, 
+                                                    region_buffer,
                                                     PROJECT.CRS)
   
+  # find the distances
+  baseline.node.distances <- 
+    addressDestinationDistances(baseline.destinations,
+                                residential.addresses,
+                                network.nodes,
+                                network.links, 
+                                PROJECT.CRS,
+                                multiple.destinations = list(c("restaurant_cafe", 4)),
+                                mode = "walk")
+  
   # save output
-  write.csv(baseline.distances, baseline.distance.location, row.names = FALSE)
+  write.csv(baseline.node.distances, baseline.node.distance.location, row.names = FALSE)
   
 }
 
@@ -321,7 +307,13 @@ if (find.baseline.distances) {
 
 # load inputs
 residential.addresses <- st_read(residential.address.location)
-baseline.distances <- read.csv(baseline.distance.location)
+baseline.distances <- residential.addresses  %>%
+  st_drop_geometry() %>%
+  # join distances
+  left_join(read.csv(baseline.node.distance.location), 
+            by = c("address.n.node" = "node_id")) %>%
+  # remove any columns for second-most-distant, etc
+  dplyr::select(-matches("[0-9]$"))
 ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 region <- st_read(region.location)
 
@@ -343,7 +335,14 @@ write.csv(baseline.coverage, "./output/20mn baseline area coverage.csv")
 # distance of destinations
 
 # load inputs
-baseline.distances <- read.csv(baseline.distance.location)
+residential.addresses <- st_read(residential.address.location)
+baseline.distances <- residential.addresses  %>%
+  st_drop_geometry() %>%
+  # join distances
+  left_join(read.csv(baseline.node.distance.location), 
+            by = c("address.n.node" = "node_id")) %>%
+  # remove any columns for second-most-distant, etc
+  dplyr::select(-matches("[0-9]$"))
 ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 
 # calculate coverage
@@ -445,10 +444,10 @@ means <- baseline.score %>%
 means
 # category    mean
 # <fct>      <dbl>
-# 1 small <2k   4.63
-# 2 small 2-5k  6.34
-# 3 medium      5.61
-# 4 large       6.31
+# 1 small <2k   4.64
+# 2 small 2-5k  6.35
+# 3 medium      5.70
+# 4 large       6.41
 
 
 ## 6.4 Allocate overlap ----

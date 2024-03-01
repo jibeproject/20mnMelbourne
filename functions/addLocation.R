@@ -12,6 +12,7 @@ addLocation <- function(failed.addresses,
                         destination.type,
                         network.nodes,
                         network.links,
+                        buffered.links,
                         g,
                         required.dist) {
   
@@ -229,7 +230,7 @@ addLocation <- function(failed.addresses,
     new.entry.nodes <- findEntryNodes(destination.type,
                                       new.location,
                                       network.nodes,
-                                      network.links)
+                                      buffered.links)
     
   } else {
     new.entry.nodes <- c()

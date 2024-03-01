@@ -1,16 +1,16 @@
-"","dest.dist","large.no","medium.no","small.no","all.no","all.pct","all.shortfall"
-"supermarket.800","Supermarket",255,86,169,510,44.8548812664908,627
-"pharmacy.800","Pharmacy",124,53,145,322,28.3201407211961,815
-"post.800","Post office",63,37,74,174,15.3034300791557,963
-"gp.800","GP",222,82,271,575,50.5716798592788,562
-"mat.child.health.800","Maternal & child health centre",36,14,107,157,13.8082673702726,980
-"dentist.800","Dentist",184,53,182,419,36.8513632365875,718
-"childcare.800","Childcare centre",248,114,542,904,79.5074758135444,233
-"kindergarten.800","Kindergarten",49,34,245,328,28.8478452066843,809
-"primary.800","Primary school",79,50,288,417,36.6754617414248,720
-"comm.library.800","Community centre or library",41,17,75,133,11.6974494283201,1004
-"convenience.400","Convenience store or supermarket",13,2,201,216,18.9973614775726,921
-"rest.cafe.400","Restaurant or cafe",29,3,260,292,25.6816182937555,845
-"park.400","Local park",144,69,387,600,52.7704485488127,537
-"bus.400.tram.600.train.800","Bus stop, tram stop or train station",245,96,594,935,82.2339489885664,202
-"acs","Number of ACs",294,136,707,1137,100,0
+,dest.dist,large.no,medium.no,small.no,all.no,all.pct,all.shortfall
+supermarket.800,Supermarket,255,86,164,505,44.41512753,632
+pharmacy.800,Pharmacy,130,57,146,333,29.28759894,804
+post.800,Post office,63,37,75,175,15.39138083,962
+gp.800,GP,225,85,268,578,50.8355321,559
+mat.child.health.800,Maternal & child health centre,35,16,108,159,13.98416887,978
+dentist.800,Dentist,192,54,182,428,37.64291996,709
+childcare.800,Childcare centre,250,114,544,908,79.8592788,229
+kindergarten.800,Kindergarten,50,37,246,333,29.28759894,804
+primary.800,Primary school,80,49,290,419,36.85136324,718
+comm.library.800,Community centre or library,42,16,75,133,11.69744943,1004
+convenience.400,Convenience store or supermarket,13,2,200,215,18.90941073,922
+rest.cafe.400,Restaurant or cafe,30,3,261,294,25.85751979,843
+park.400,Local park,144,67,393,604,53.12225154,533
+bus.400.tram.600.train.800,"Bus stop, tram stop or train station",245,95,596,936,82.32189974,201
+acs,Number of ACs,294,136,707,1137,100,0

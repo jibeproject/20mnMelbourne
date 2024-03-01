@@ -4,13 +4,17 @@ addressDestinationDistances <- function(destinations,
                                         residential.addresses,
                                         network.nodes,
                                         network.links, 
-                                        PROJECT.CRS) {
-  
-  # destinations = baseline.destinations
+                                        PROJECT.CRS,
+                                        multiple.destinations = NA,
+                                        mode = "walk") {
+# 
+  # destinations = all.destinations
   # residential.addresses = residential.addresses
-  # network.nodes = network.nodes
-  # network.links = network.links
+  # network.nodes = network.nodes.cycle
+  # network.links = network.links.cycle
   # PROJECT.CRS = PROJECT.CRS
+  # multiple.destinations <- list(c("restaurant_cafe", 4))
+  # mode = cycle
   
   
   # unpack "destinations"
@@ -26,24 +30,40 @@ addressDestinationDistances <- function(destinations,
     assign(destination.types[i], as.data.frame(destinations[i+1]))
   }
   
+  # unpack "multiple destinations"
+  # ---------------------------------#
+  mult.dest.types <- c()
+  mult.dest.nos <- c()
+  if (!is.na(multiple.destinations)[1]) {
+    for (i in 1:length(multiple.destinations)) {
+      mult.dest.types <- c(mult.dest.types, multiple.destinations[[i]][1])
+      mult.dest.nos <- c(mult.dest.nos, multiple.destinations[[i]][2])
+    }
+  }
   
   # get unique residential addresses nodes
   # ---------------------------------#
   
-  print(paste(Sys.time(), "|", 
-              "getting unique residential addresses nodes"))
+  print(paste(Sys.time(), "| getting unique residential address nodes"))
   
-  # add nearest nodes to residential addresses
-  residential.addresses <- 
-    cbind(residential.addresses,
-          address.n.node = 
-            network.nodes$id[st_nearest_feature(residential.addresses, network.nodes)])
-
   # unique residential address nodes
-  residential.nodes <- unique(residential.addresses$address.n.node)   
+  if (mode == "walk") {
+    residential.nodes <- unique(residential.addresses$address.n.node)   
+  } else if (mode == "cycle") {
+    # change address nodes to cycling nodes
+    residential.nodes <- residential.addresses %>%
+      mutate(address.n.node = network.nodes$id[st_nearest_feature(., network.nodes)]) %>%
+      .$address.n.node %>%
+      unique()
+  } else {
+    message(paste0("Network is not configured for the chosen mode '", mode, "'; terminating"))
+    return(NULL)
+  }
   
   
-  # create the graph for finding distances (undirected as used for walking)
+  # create the graph for finding distances (undirected where used for walking;
+  # cycling also undirected as we're creating a cyclable distance catchment,
+  # not a one-way route)
   # ---------------------------------#
   
   print(paste(Sys.time(), "|", "creating graph"))
@@ -66,7 +86,7 @@ addressDestinationDistances <- function(destinations,
   # ---------------------------------#
   
   for (i in 1:length(destination.types)) {
-  # for (i in c(9:14)) {
+  # for (i in c(13:13)) {
     
     # load destinations
     # ---------------------------------#
@@ -88,10 +108,12 @@ addressDestinationDistances <- function(destinations,
 
     if (destination.types[i] %in% c("park")) {
       
+      buffered.links <- st_buffer(network.links, 30)
+      
       dest.nodes <- findEntryNodes(destination.types[i],
                                    destination,
                                    network.nodes,
-                                   network.links)
+                                   buffered.links)
       
     } else {
       
@@ -105,24 +127,33 @@ addressDestinationDistances <- function(destinations,
     # measure distances from destinations to addresses 
     # ---------------------------------#
     
-    # some destinations have large node numbers, so split into groups of 1000
+    # some destinations have large node numbers, so split into groups of 1000 - 
+    # unless multiple destinations are required, in which case must be kept as one group
     
-    # number of groups of 1000 destination nodes
-    dest.groups <- ceiling(length(dest.nodes) / 1000)  # number of groups of up to 1000
-    
-    # assign each group of 1000 destination nodes to a 'dest group name'
-    dest.group.names <- c()
-    
-    for (j in 1:dest.groups) {
-      startno <- ((j-1) * 1000) + 1
-      if (j != dest.groups) {
-        endno <- j * 1000 
-      } else {
-        endno <- length(dest.nodes)
+    if (!destination.types[i] %in% mult.dest.types) {
+      
+      # number of groups of 1000 destination nodes
+      dest.groups <- ceiling(length(dest.nodes) / 1000)  # number of groups of up to 1000
+      
+      # assign each group of 1000 destination nodes to a 'dest group name'
+      dest.group.names <- c()
+      
+      for (j in 1:dest.groups) {
+        startno <- ((j-1) * 1000) + 1
+        if (j != dest.groups) {
+          endno <- j * 1000 
+        } else {
+          endno <- length(dest.nodes)
+        }
+        dest.group.name = paste0("dest.group.", j)
+        assign(dest.group.name, dest.nodes[startno:endno])
+        dest.group.names <- c(dest.group.names, dest.group.name)
       }
-      dest.group.name = paste0("dest.group.", j)
-      assign(dest.group.name, dest.nodes[startno:endno])
-      dest.group.names <- c(dest.group.names, dest.group.name)
+      
+    } else {
+      # single group where finding multiple destinations of same type
+      dest.group.names <- "dest.group.1"
+      dest.group.1 <- dest.nodes
     }
     
     # for each 'dest group name' group of 1000 destination nodes, get the 
@@ -186,14 +217,13 @@ addressDestinationDistances <- function(destinations,
       
       # loop to find distances - note that this will not actually produce
       # an 'output' file, because nothing is returned by the loop - instead, it
-      # writes every stop to the temporary 'distances/matrices' folder
+      # writes every output to the temporary 'distances/matrices' folder
       output <-
         foreach(j = 1:length(dest.group.names),
                 # foreach(j = 59:73,
                 .combine = rbind,
                 .export = dest.group.names,
                 .packages = c("dplyr", "sf", "igraph"), 
-                # .verbose = TRUE,  # can using this as progress reporting not working (or just look at 'distances/matrices')
                 .options.snow = opts) %dopar% {
                   
                   # find distances for each group, and save to the temporary folder
@@ -224,6 +254,7 @@ addressDestinationDistances <- function(destinations,
     if (length(dest.group.names) == 1) {
       
       # where there is only one group, find the distance minimum for each address
+      # note that if multiple destinations are required, there is always only one group
       
       # get the sole output
       dest.dist <- get(dest.group.outputs[1])
@@ -233,11 +264,34 @@ addressDestinationDistances <- function(destinations,
                   "- finding minimum distance for each address"))
       
       # minimum distance between destinations and addresses
-      # lowest distance for each resid node (columns are resid nodes, so 2)
-      min.dist <- apply(dest.dist, 2, min, na.rm = TRUE) %>%  
-        as.data.frame() %>%
-        cbind(id = as.numeric(row.names(.))) %>%
-        rename(!!destination.types[i] := ".")  
+      
+      if (!destination.types[i] %in% mult.dest.types) {
+        # lowest distance for each resid node (columns are resid nodes, so 2)
+        min.dist <- apply(dest.dist, 2, min, na.rm = TRUE) %>%  
+          as.data.frame() %>%
+          cbind(id = as.numeric(row.names(.))) %>%
+          rename(!!destination.types[i] := ".")  
+        
+      } else {
+        # where multiple destinations required
+        # number required, from mult.dest.nos, corresopnding to the relevant dest type
+        no.reqd <- mult.dest.nos[which(mult.dest.types == destination.types[i])]
+        
+        # function to get the n lowest distances for each residential address
+        get_n_lowest <- function(x, n) {
+          sort(x, na.last = NA)[1:n]
+        }
+        
+        # apply the function to get the 3 lowest distances for each residential address
+        lowest_n_dist <- t(apply(dest.dist, 2, get_n_lowest, n = no.reqd))
+        
+        # create a data frame with the results
+        min.dist <- data.frame(id = as.numeric(row.names(lowest_n_dist)), lowest_n_dist)
+ 
+        # rename columns
+        colnames(min.dist)[2] <- destination.types[i]
+        colnames(min.dist)[3:ncol(min.dist)] <- paste0(destination.types[i], "_", 2:no.reqd)
+      }
       
     } else {
       
@@ -300,26 +354,31 @@ addressDestinationDistances <- function(destinations,
     
   }
   
-  # assemble distances with residential addresses
+  # assemble table of nodes and distances
   # ---------------------------------#
   # report progress
-  print(paste(Sys.time(), "|", "assembling distances with residential addresses"))
-  
-  
-  address.destination.distances <- residential.addresses %>%
-    st_drop_geometry()
+  print(paste(Sys.time(), "|", "assembling distances with residential address nodes"))
   
   for (i in 1:length(list.files("./distances"))) {
     distance.file <- readRDS(paste0("./distances/", list.files("./distances")[i]))
-    address.destination.distances <- address.destination.distances %>%
-      left_join(distance.file, by = c("address.n.node" = "id"))
+    if (i == 1) {
+      address.destination.node.distances <- distance.file %>%
+        # put id first
+        select(id, everything())
+    } else {
+      address.destination.node.distances <- address.destination.node.distances %>%
+        left_join(distance.file, by = "id")
+    }
   }
+  
+  address.destination.node.distances <- address.destination.node.distances %>%
+    rename(node_id = id)
   
   # remove the distances folder
   unlink("./distances", recursive = TRUE)
   
   
-  return(address.destination.distances)
+  return(address.destination.node.distances)
   
 }
 

@@ -1,5 +1,5 @@
 # assemble files from temporary catchment folders (created by 
-# makeNAcCatchments.R) into output files
+# makeAcCatchments.R) into output files
 
 assembleCatchmentOutputs <- function(temp.address.location,
                                      temp.polygon.location) {
@@ -9,7 +9,7 @@ assembleCatchmentOutputs <- function(temp.address.location,
   
   # combine all the address and polygon files saved to 'catchments' directories
   
-  print(paste(Sys.time(), "|", "combining outputs for individual NACs"))
+  print(paste(Sys.time(), "|", "combining outputs for individual ACs"))
   
   # vectors to hold all  variables
   address.nos <- c()
@@ -17,12 +17,12 @@ assembleCatchmentOutputs <- function(temp.address.location,
   
   
   # read in all the files in 'catchments' folders, with each given a name from the
-  # file minus .rds (that is, 'nac_1.rds' read in as 'nac_1', etc - note that
+  # file minus .rds (that is, '1.rds' read in as '1', etc - note that
   # the numbers are the centre_no's)
   
   # read in addresses
   for (i in 1:length(list.files(temp.address.location))) {
-    # create the nac number variable (eg 'nac_1.rds' is 'nac_1_address')
+    # create the ac number variable (eg '1.rds' is '1_address')
     var.name <- paste0(gsub(".rds", "", list.files(temp.address.location)[i]),
                        "_address")
     # read in the rds file and assign it to the variable
@@ -36,7 +36,7 @@ assembleCatchmentOutputs <- function(temp.address.location,
   
   # read in polygons
   for (i in 1:length(list.files(temp.polygon.location))) {
-    # create the nac number variable (eg 'nac_1.rds' is 'nac_1_poly')
+    # create the ac number variable (eg '1.rds' is '1_poly')
     var.name <- paste0(gsub(".rds", "", list.files(temp.polygon.location)[i]),
                        "_poly")
     # read in the rds file and assign it to the variable
@@ -53,45 +53,45 @@ assembleCatchmentOutputs <- function(temp.address.location,
   
   # combine addresses
   # begin with the first variable (with 'CENTRE_NO' as numeric part of 
-  # the name, eg 'nac_poly_29' becomes '29')
-  nac.catchment.addresses <- cbind(CENTRE_NO = as.numeric(gsub("\\D", "", poly.nos[1])),
-                                   address_ids = list(get(address.nos[1])))
+  # the name, eg 'poly_29' becomes '29')
+  ac.catchment.addresses <- cbind(CENTRE_NO = as.numeric(gsub("\\D", "", poly.nos[1])),
+                                  address_ids = list(get(address.nos[1])))
   # then add the others
   for (i in 2:length(address.nos)) {
-    nac.catchment.addresses <- rbind(nac.catchment.addresses,
-                                     cbind(CENTRE_NO = as.numeric(gsub("\\D", "", poly.nos[i])),
-                                           address_ids = list(get(address.nos[i]))))
+    ac.catchment.addresses <- rbind(ac.catchment.addresses,
+                                    cbind(CENTRE_NO = as.numeric(gsub("\\D", "", poly.nos[i])),
+                                          address_ids = list(get(address.nos[i]))))
   }
   
   # convert CENTRE_NO column to numeric
-  nac.catchment.addresses <- as.data.frame(nac.catchment.addresses) %>%
+  ac.catchment.addresses <- as.data.frame(ac.catchment.addresses) %>%
     mutate(CENTRE_NO = as.numeric(CENTRE_NO))
   
   # combine polygons
   # begin with the first variable (with 'CENTRE_NO' as numeric part of 
-  # the name, eg 'nac_poly_29' becomes '29')
-  nac.catchment.polygons <- get(poly.nos[1]) %>%
+  # the name, eg 'poly_29' becomes '29')
+  ac.catchment.polygons <- get(poly.nos[1]) %>%
     mutate(CENTRE_NO = gsub("\\D", "", poly.nos[1]))
   # then add the others
   for (i in 2:length(poly.nos)) {
-    nac.catchment.polygons <- 
-      rbind(nac.catchment.polygons, 
+    ac.catchment.polygons <- 
+      rbind(ac.catchment.polygons, 
             get(poly.nos[i]) %>%
               mutate(CENTRE_NO = gsub("\\D", "", poly.nos[i])))
     
   }
   # convert CENTRE_NO column to numeric
-  nac.catchment.polygons <- nac.catchment.polygons %>%
+  ac.catchment.polygons <- ac.catchment.polygons %>%
     mutate(CENTRE_NO = as.numeric(CENTRE_NO))
   
   
-  # # NOTE - TO ACCESS THE ADDRESS LIST FOR AN INDIVIDUAL NAC:
-  # indiv.nac.add <- nac.catchment.addresses %>%
+  # # NOTE - TO ACCESS THE ADDRESS LIST FOR AN INDIVIDUAL AC:
+  # indiv.ac.add <- ac.catchment.addresses %>%
   #   filter(CENTRE_NO == 29) %>%
   #   .$address_ids %>%
   #   unlist()
   
-  return(list(nac.catchment.addresses, nac.catchment.polygons))
+  return(list(ac.catchment.addresses, ac.catchment.polygons))
   
   
 }

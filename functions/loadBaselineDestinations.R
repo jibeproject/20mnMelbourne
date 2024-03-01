@@ -7,7 +7,8 @@
 loadBaselineDestinations <- function(POIs.location, 
                                      ANLS.dest.location,
                                      ANLS.pos.location,
-                                     region_buffer) {
+                                     region_buffer,
+                                     PROJECT.CRS) {
   
   # read in the destination files
   POIs <- st_read(POIs.location)
