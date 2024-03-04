@@ -174,7 +174,6 @@ ac.catchment.polygon.location <- "./output/ac_catchment_polygons.sqlite"
 # baseline address destination distances: set to F if using existing, or create in section 4
 find.baseline.distances <- F
 baseline.node.distance.location <- "./output/node_distances_baseline.csv"
-baseline.distsport.location <- "./output/baseline_distsport_display.sqlite"
 
 # directory for outputs
 if (!dir.exists("./output")) {

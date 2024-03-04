@@ -47,5 +47,5 @@ updated.links <- links %>%
 
 
 # save output to required location - TO DO - CHECK FINAL LOCATION
-st_write(updated.links, "../data/processed/edgesMelbourneUpdatedSpeed.gpkg")
+st_write(updated.links, "../output/edgesMelbourneUpdatedSpeed.gpkg")
 
