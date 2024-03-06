@@ -93,6 +93,9 @@ for (i in 1:length(intervention.destinations[[1]])) {
 LGAs <- read_zipped_GIS(zipfile = "../data/original/LGAs.zip",
                          subpath = "/mga94_55/esrishape/whole_of_dataset/victoria/VMADMIN")
 
+# SA2s
+SA2s <- read_zipped_GIS(zipfile = "../data/original/1270055001_sa2_2016_aust_shape.zip") %>%
+  st_transform(PROJECT.CRS)
 
 # node distances for accessibility analysis (section 2.1): set to F if using existing, 
 # or create in section 2.1
@@ -334,7 +337,6 @@ dwel.utilisation <- intervention.destinations.with.dwellings %>%
   mutate(utilisation = dwel_served / dwel_reqt)
 
 
-
 ## 3.4 Calculate average for each destination type and LGA ----
 ## ------------------------------------#
 dwel.LGA <- dwel.utilisation %>%
@@ -368,3 +370,33 @@ dwel.LGA <- dwel.utilisation %>%
  
 # write output
 write.csv(dwel.LGA, "./output/underutilisation LGA.csv", row.names = FALSE)
+
+
+## 3.5 Calculate average for each destination type and SA2 ----
+## ------------------------------------#
+dwel.SA2 <- dwel.utilisation %>%
+  # convert polygons to centroids
+  st_centroid() %>%
+  # intersect with SA1s %>%
+  st_join(., SA2s %>% dplyr::select(SA2_MAIN16), .predicate = st_intersects) %>%
+  st_drop_geometry() %>%
+  # find SA1 average utilisation for each destination type
+  group_by(SA2_MAIN16, dest_type) %>%
+  summarise(mean_util = mean(utilisation)) %>%
+  ungroup() %>%
+  # arrange for display
+  pivot_wider(names_from = dest_type,
+              values_from = mean_util) %>%
+  
+  # unlike LGAs, don't filter at this point - will control display through
+  # using a Greater Melbourne mask
+  
+  # arrange output columns in desired order
+  dplyr::select(SA2_MAIN16, supermarket, convenience_store, cafe, pharmacy, post,
+                gp, maternal_child_health, dentist, childcare, kindergarten,
+                primary, community_centre, park, bus)
+
+
+# write output
+write.csv(dwel.SA2, "./output/underutilisation SA2.csv", row.names = FALSE)
+

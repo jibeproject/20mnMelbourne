@@ -20,9 +20,10 @@ The code requires the following input files, which are available [to authorised 
 |*data/processed/edgesMelbourne.gpkg* & *data/processed/nodesMelbourne.gpkg* |Edges and nodes making up the road network |
 |*data/original/VIC_ADDRESS_DEFAULT_GEOCODE_psv.psv* |Geocoded National Address File (GNAF) points for Victoria |
 |*data/original/1270055001_mb_2016_vic_shape.zip* |ABS 2016 census meshblocks for Victoria|
+|*data/original/1270055001_sa2_2016_aust_shape.zip* |ABS 2016 census SA2s       |
+|*data/original/LGAs.zip* |Local government areas for Victoria                  |
 |*data/processed/Weighted POIs/poi.gpkg* |Baseline destinations locations for certain destination types |
 |*data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg* |Baseline destination locations for public open space and certain other destination types |
-|*data/original/LGAs.zip* |Local government areas for Victoria |
 
 # Output files
 The code produces the following output files, which are saved to the `output` directory.
@@ -57,6 +58,7 @@ The code produces the following output files, which are saved to the `output` di
 |*LGA accessibility scores cycle.csv* |Cycling accessibility scores, summarised by local government area |
 |*intervention_destinations_with_dwellings.sqlite* |Number of residential addresses in catchment of each new destination location |
 |*underutilisation LGA.csv* |Underutilisation scores for each destination type and local government area |
+|*underutilisation SA2.csv* |Underutilisation scores for each destination type and SA2 |
 
 
 #### `intervention cycling speed.R`
