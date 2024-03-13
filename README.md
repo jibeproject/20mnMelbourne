@@ -3,14 +3,14 @@ This repository contains code for the 20 minute neighbourhood intervention.  The
 - the cycling component, which reduces cycling speed on residential streets.
 
 # Overview
-There are 4 main files.
+There are 4 main script files.
 - `baseline.R` assesses the baseline status of access to destinations.
 - `intervention destination.R` identifies locations for additional community destinations in and around activity centres.
 - `analysis.R` undertakes an accessibility analysis and an underutilisation analysis of the results of adding the additional destination locations.
-- `intervention cycling speed.R` alters the network by reucing cycling speed on residential streets.
+- `intervention cycling speed.R` alters the network by reudcing cycling speed on residential streets.
 
 # Input files
-The code requires the following input files, which are available [to authorised users] at [*insert location when known*].  The code assumes that the files are located in a `data` directory which sits beside the directory in which the files are located ("../data/").
+The code requires the following input files, which are available [to authorised users] at [*insert location when known*].  The code assumes that the input files are located in a `data` directory ("../data/") which sits beside the directory in which the script files are located .
 
 | File               | Content                                                  |
 |--------------------|----------------------------------------------------------|
@@ -56,6 +56,8 @@ The code produces the following output files, which are saved to the `output` di
 |*dwel accessibility scores cycle.csv* |Cycling accessibility scores for each residential address |
 |*LGA accessibility scores walk.csv* |Walking accessibility scores, summarised by local government area |
 |*LGA accessibility scores cycle.csv* |Cycling accessibility scores, summarised by local government area |
+|*SA2 accessibility scores walk.csv* |Walking accessibility scores, summarised by SA2 |
+|*SA2 accessibility scores cycle.csv* |Cycling accessibility scores, summarised by SA2 |
 |*intervention_destinations_with_dwellings.sqlite* |Number of residential addresses in catchment of each new destination location |
 |*underutilisation LGA.csv* |Underutilisation scores for each destination type and local government area |
 |*underutilisation SA2.csv* |Underutilisation scores for each destination type and SA2 |

@@ -278,6 +278,42 @@ LGA.scores.cycle <- calculateLgaAccessibilityScores(address.scores.cycle)
 write.csv(LGA.scores.cycle, "./output/LGA accessibility scores cycle.csv", row.names = F)
 
 
+## 2.4 Aggregate scores for SA2s ----
+## ------------------------------------#
+addresses.with.SA2 <- residential.addresses %>%
+  st_join(., SA2s %>% dplyr::select(SA2_MAIN16), .predicate = st_intersects) %>%
+  st_drop_geometry()
+
+# walk
+address.scores.walk <- addresses.with.SA2 %>%
+  # join the scores
+  left_join(baseline.walk.scores, 
+            by = c("address.n.node" = "node_id")) %>%
+  left_join(intervention.walk.scores, 
+            by = c("address.n.node" = "node_id"),
+            suffix = c("_base", "_int"))
+
+SA2.scores.walk <- calculateSA2AccessibilityScores(address.scores.walk)
+
+# save output
+write.csv(SA2.scores.walk, "./output/SA2 accessibility scores walk.csv", row.names = F)
+
+# cycle
+address.scores.cycle <- addresses.with.SA2 %>%
+  # join the scores
+  left_join(baseline.cycle.scores, 
+            by = c("cycle.node" = "node_id")) %>%
+  left_join(intervention.cycle.scores, 
+            by = c("cycle.node" = "node_id"),
+            suffix = c("_base", "_int"))
+
+SA2.scores.cycle <- calculateSA2AccessibilityScores(address.scores.cycle)
+
+# save output
+write.csv(SA2.scores.cycle, "./output/SA2 accessibility scores cycle.csv", row.names = F)
+
+
+
 #  3 Underutilisation analysis ----
 # -----------------------------------------------------------------------------#
 ## 3.1 Dwellings served by new destinations ----
