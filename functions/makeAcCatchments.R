@@ -14,8 +14,8 @@ makeAcCatchments <- function(ACs,
   # ACs = ACs %>% filter(CENTRESIZE != "Undeveloped")
   # supermarkets = st_read(POIs.location) %>% filter(Attribute == "supermarket")
   # residential.addresses = st_read(residential.address.location)
-  # network.nodes = network.nodes
-  # network.links = network.links
+  # network.nodes = network.nodes.walk
+  # network.links = network.links.walk
   # BUFFDIST.SMALL = BUFFDIST.SMALL
   # BUFFDIST.MED.LARGE = BUFFDIST.MED.LARGE
   # DENSIFICATION.DIST = DENSIFICATION.DIST
@@ -73,7 +73,7 @@ makeAcCatchments <- function(ACs,
   # writes every stop to the temporary 'catchments' folders
   output <-
     foreach(i = 1:nrow(ACs),
-            # foreach(i = 1:3,
+            # foreach(i = 1:50,
             .combine = rbind,
             .export = c("densifySubNetwork"),
             .packages = c("dplyr", "sf", "igraph", "lwgeom"), 
@@ -168,14 +168,14 @@ makeAcCatchments <- function(ACs,
               reachable.nodes <- min.distances %>%
                 filter(. <= BUFFDIST) %>%
                 .$id
-              
+
               # ggplot() +
               #   geom_sf(data = subnetwork.nodes) +
               #   geom_sf(data = subnetwork.nodes %>%
               #             filter(id %in% reachable.nodes),
               #           colour = "blue") +
               #   geom_sf(data = subnetwork.nodes %>%
-              #             filter(id %in% AC.anchor.nodes$n.node),
+              #             filter(id %in% AC.anchors$n.node),
               #           colour = "red")
 
            
@@ -191,7 +191,7 @@ makeAcCatchments <- function(ACs,
               #             filter(id %in% reachable.nodes),
               #           colour = "blue") +
               #   geom_sf(data = subnetwork.nodes %>%
-              #             filter(id %in% AC.anchor.nodes$n.node),
+              #             filter(id %in% AC.anchors$n.node),
               #           colour = "red") +
               #   geom_sf(data = buffer.addresses, colour = "green")
               
@@ -211,7 +211,7 @@ makeAcCatchments <- function(ACs,
               #             filter(id %in% reachable.nodes),
               #           colour = "blue") +
               #   geom_sf(data = subnetwork.nodes %>%
-              #             filter(id %in% AC.anchor.nodes$n.node),
+              #             filter(id %in% AC.anchors$n.node),
               #           colour = "red") +
               #   geom_sf(data = buffer.addresses, colour = "green") +
               #   geom_sf(data = catchment.addresses, colour = "purple")

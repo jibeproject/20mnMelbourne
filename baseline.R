@@ -3,10 +3,14 @@
 #------------------------------------------------------------------------------#
 # Process ----
 # •	Find residential addresses (section 2)
-#   o	Filter addresses to study region (Greater Melbourne GCCSA plus 10km buffer), 
-#     and to residential meshblocks.
+#   o	Filter GNAF addresses to study region (Greater Melbourne GCCSA plus 10km 
+#     buffer) and join meshblocks.
+#   o Exclude addresses in meshblocks with census count of <= 5 dwellings or
+#     <= 10 persons.
+#   o Add weights for each address: meshblock dwelling or person count divided by
+#     number of address points in meshblock.
+#   o Identify nearest node to each address on walking and cycling networks.
 #   o	Add an ‘id’ field, for later linking to distances outputs.
-#   o	Identify nearest network node to each residential address (‘residential nodes’).
 #   o	Result saved as output/residential_addresses.sqlite.
 # •	Make catchment for each AC (section 3.1 and functions/makeAcCatchments.R).  
 #   o	Load  Activity Centre (AC) polygons and supermarkets
@@ -90,6 +94,7 @@ library(stringr)
 library(doSNOW)
 library(parallel)
 library(foreach)
+library(openxlsx)
 
 options(scipen = 999)
 
@@ -140,10 +145,10 @@ nodes.walk <- nodes %>% filter(id %in% links.walk$from_id | id %in% links.walk$t
 links.cycle <- links %>% filter(is_cycle == TRUE)
 nodes.cycle <- nodes %>% filter(id %in% links.cycle$from_id | id %in% links.cycle$to_id)
 
-# keep just the largest connected networks ('network' is walking; 'network.cycle' is cycling)
-network <- largestConnectedComponent(nodes.walk, links.walk)
-network.nodes <- network[[1]]
-network.links <- network[[2]]
+# keep just the largest connected networks
+network.walk <- largestConnectedComponent(nodes.walk, links.walk)
+network.nodes.walk <- network.walk[[1]]
+network.links.walk <- network.walk[[2]]
 
 network.cycle <- largestConnectedComponent(nodes.cycle, links.cycle)
 network.nodes.cycle <- network.cycle[[1]]
@@ -153,6 +158,7 @@ network.links.cycle <- network.cycle[[2]]
 # address and region data locations
 address.location <- "../data/original/VIC_ADDRESS_DEFAULT_GEOCODE_psv.psv"
 meshblock.location <- "../data/original/1270055001_mb_2016_vic_shape.zip"
+meshblock.count.location <- "../data/original/2016 census mesh block counts.csv"
 region.location <- "../data/processed/region.sqlite"
 
 # baseline points of interest location
@@ -163,17 +169,21 @@ ANLS.dest.location <-
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
 
 # residential addresses: set to F if using existing, or create in section 2
-find.residential.addresses <- F
+find.residential.addresses <- T
 residential.address.location <- "./output/residential_addresses.sqlite"
 
 # AC catchments: set to F if using existing, or create in section 3
-make.AC.catchments <- F
+make.AC.catchments <- T
 ac.catchment.address.location <- "./output/ac_catchment_addresses.rds"
 ac.catchment.polygon.location <- "./output/ac_catchment_polygons.sqlite"
 
 # baseline address destination distances: set to F if using existing, or create in section 4
-find.baseline.distances <- F
-baseline.node.distance.location <- "./output/node_distances_baseline.csv"
+find.baseline.distances <- T
+baseline.node.distance.location <- "./output/node_distances_baseline_walk.csv"
+baseline.node.distance.location <- "./output/node_distances_baseline.csv"  #<<< TEMPORARY TO DELETE
+
+# baseline output summary
+baseline.output.location <- "./output/baseline assessment.xlsx"
 
 # directory for outputs
 if (!dir.exists("./output")) {
@@ -193,28 +203,39 @@ if (find.residential.addresses) {
     st_as_sf(coords = c("LONGITUDE", "LATITUDE"), crs = st_crs(4283)) %>%
     st_transform(PROJECT.CRS)
   
-  # meshblocks
+  # meshblocks with counts
   meshblocks <- 
     read_zipped_GIS(zipfile = meshblock.location) %>%
-    st_transform(PROJECT.CRS)
+    st_transform(PROJECT.CRS) %>%
+    left_join(read.csv(meshblock.count.location),
+              by = c("MB_CODE16" = "MB_CODE_2016"))
   
-  # find addresses located in study area residential meshblocks
+  # find addresses in study area meshblocks meeting residential criteria,
+  # with weights and nearest nodes
   residential.addresses <- addresses %>%
     # filter to region
     st_filter(region_buffer, .predicate = st_intersects) %>%
-    # intersect with addresses and filter to residential
+    # intersect with meshblocks
     st_intersection(meshblocks) %>%
-    filter(MB_CAT16 == "Residential") %>%
-    # add id
+    
+    # exclude dwellings <= 5 or persons <= 10
+    filter(Dwelling > 5 & Person > 10) %>%
+    
+    # add dwelling and person weights (meshblock count / number of address points in meshblock)
+    group_by(MB_CODE16) %>%
+    mutate(total_addresses = n()) %>%
+    ungroup() %>%
+    mutate(dwel_wt = Dwelling / total_addresses,
+           pop_wt = Person / total_addresses) %>%
+  
+    # add nearest walking and cycling network nodes
+    mutate(walk_node = network.nodes.walk$id[st_nearest_feature(., network.nodes.walk)],
+           cycle_node = network.nodes.cycle$id[st_nearest_feature(., network.nodes.cycle)]) %>%
+  
+    # add id, and retain just id, weights and nodes
     mutate(id = row_number()) %>%
-    dplyr::select(id) %>%
-    # add nearest network node (note: this is walking network)
-    mutate(address.n.node = network.nodes$id[st_nearest_feature(., network.nodes)])
-  
-  # add nearest cycling nodes
-  residential.addresses <- residential.addresses %>%
-    mutate(cycle.node = network.nodes.cycle$id[st_nearest_feature(., network.nodes.cycle)])
-  
+    dplyr::select(id, dwel_wt, pop_wt, walk_node, cycle_node)
+
   # write output
   st_write(residential.addresses, residential.address.location, 
            delete_layer = TRUE)
@@ -244,8 +265,8 @@ if (make.AC.catchments) {
   # run the function - saves files to the catchments folders
   makeAcCatchments(ACs.filtered,
                    supermarkets,
-                   network.nodes,
-                   network.links,
+                   network.nodes.walk,
+                   network.links.walk,
                    residential.addresses,
                    BUFFDIST.SMALL,
                    BUFFDIST.MED.LARGE,
@@ -293,8 +314,8 @@ if (find.baseline.distances) {
   baseline.node.distances <- 
     addressDestinationDistances(baseline.destinations,
                                 residential.addresses,
-                                network.nodes,
-                                network.links, 
+                                network.nodes.walk,
+                                network.links.walk, 
                                 PROJECT.CRS,
                                 multiple.destinations = list(c("restaurant_cafe", 4)),
                                 mode = "walk")
@@ -307,6 +328,14 @@ if (find.baseline.distances) {
 
 # 5 Assess baseline status ----
 # -----------------------------------------------------------------------------#
+## 5.0 Set up output workbook ----
+## ------------------------------------#
+# read in if it exists, or create if not
+if (file.exists(baseline.output.location)) {
+  wb <-loadWorkbook(baseline.output.location)
+} else {
+  wb <- createWorkbook()
+}
 
 ## 5.1 Overall status ----
 ## ------------------------------------#
@@ -321,21 +350,43 @@ baseline.distances <- residential.addresses  %>%
   st_drop_geometry() %>%
   # join distances
   left_join(read.csv(baseline.node.distance.location), 
-            by = c("address.n.node" = "node_id")) %>%
+            by = c("walk_node" = "node_id")) %>%
   # remove any columns for second-most-distant, etc
   dplyr::select(-matches("[0-9]$"))
 ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 region <- st_read(region.location)
 
 # calculate coverage
-baseline.coverage <- calculateCoverage(residential.addresses,
-                                       baseline.distances, 
-                                       ac.catchment.addresses, 
-                                       ACs,
-                                       region)
+baseline.coverage.pop <- calculateCoverage(residential.addresses,
+                                           baseline.distances, 
+                                           ac.catchment.addresses, 
+                                           ACs,
+                                           region,
+                                           mode = "people")
+
+baseline.coverage.dwel <- calculateCoverage(residential.addresses,
+                                            baseline.distances, 
+                                            ac.catchment.addresses, 
+                                            ACs,
+                                            region,
+                                            mode = "dwellings")
+
 
 # write output
-write.csv(baseline.coverage, "./output/20mn baseline area coverage.csv")
+# worksheets with required names, if not already present
+if (!"baseline area coverage pop" %in% names(wb)) {
+  addWorksheet(wb, sheetName = "baseline area coverage pop")
+}
+if (!"baseline area coverage dwel" %in% names(wb)) {
+  addWorksheet(wb, sheetName = "baseline area coverage dwel")
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = "baseline area coverage pop", baseline.coverage.pop)
+writeData(wb, sheet = "baseline area coverage dwel", baseline.coverage.dwel)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
 
 
 ## 5.2 ACs ----

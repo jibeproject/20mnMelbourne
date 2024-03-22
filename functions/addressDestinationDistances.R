@@ -48,10 +48,10 @@ addressDestinationDistances <- function(destinations,
   
   # unique residential address nodes
   if (mode == "walk") {
-    residential.nodes <- unique(residential.addresses$address.n.node)   
+    residential.nodes <- unique(residential.addresses$walk_node)   
   } else if (mode == "cycle") {
     # change address nodes to cycling nodes
-    residential.nodes <- unique(residential.addresses$cycle.node)
+    residential.nodes <- unique(residential.addresses$cycle_node)
   } else {
     message(paste0("Network is not configured for the chosen mode '", mode, "'; terminating"))
     return(NULL)
