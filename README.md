@@ -69,22 +69,28 @@ The `intervention tables.xlsx` file contains the following tables.
 |*order comparison*  |Numbers of added destinations under each of the 'small first' and 'large first' approaches|
 
 
-#### `analysis.R` [TO BE UPDATED]
+#### `analysis.R` [ACCESSIBILITY DONE, UNDERUTILISATION TO BE UPDATED]
 | File               | Content                                                  |
 |--------------------|----------------------------------------------------------|
-|*node_distances_baseline.csv* |Baseline walking distance from each residential address node to the nearest destination of each type (created in `baseline.R`)|
+|*node_distances_baseline_walk.csv* |Baseline walking distance from each residential address node to the nearest destination of each type (created in `baseline.R`)|
 |*node_distances_baseline_cycle.csv* |Baseline cycling distance from each residential address node to the nearest destination of each type |
 |*node_distances_intervention_walk.csv* |Intervention walking distance from each residential address node to the nearest destination of each type |
 |*node_distances_intervention_cycle.csv* |Intervention cycling distance from each residential address node to the nearest destination of each type |
 |*dwel accessibility scores walk.csv* |Walking accessibility scores for each residential address |
 |*dwel accessibility scores cycle.csv* |Cycling accessibility scores for each residential address |
-|*LGA accessibility scores walk.csv* |Walking accessibility scores, summarised by local government area |
-|*LGA accessibility scores cycle.csv* |Cycling accessibility scores, summarised by local government area |
-|*SA2 accessibility scores walk.csv* |Walking accessibility scores, summarised by SA2 |
-|*SA2 accessibility scores cycle.csv* |Cycling accessibility scores, summarised by SA2 |
+|*accessibility tables.xlsx* |Tables relating to the accessibility analysis, as described below |
 |*intervention_destinations_with_dwellings.sqlite* |Number of residential addresses in catchment of each new destination location |
 |*underutilisation LGA.csv* |Underutilisation scores for each destination type and local government area |
 |*underutilisation SA2.csv* |Underutilisation scores for each destination type and SA2 |
+
+The `accessibility tables.xlsx` file contains the following tables.
+| Table              | Content                                                  |
+|--------------------|----------------------------------------------------------|
+|*LGA accessibility scores walk* |Walking accessibility scores, summarised by local government area |
+|*LGA accessibility scores cycle* |Cycling accessibility scores, summarised by local government area |
+|*LCA accessibility scores summ* |Walking and cycling accessibility scores, by local government area, using the main (single, binary) scoring method |
+|*SA2 accessibility scores walk* |Walking accessibility scores, summarised by SA2 |
+|*SA2 accessibility scores cycle* |Cycling accessibility scores, summarised by SA2 |
 
 
 #### `intervention cycling speed.R`[TO BE UPDATED]
