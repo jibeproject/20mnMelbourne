@@ -1,7 +1,7 @@
 # function to  find entry nodes for polygons, with notional access points at 20m 
 # intervals along roads within 30m of boundary - see
 # https://github.com/carlhiggs/Australian-National-Liveability-Study-2018-datasets-supplementary-material/blob/main/Identifying%20public%20open%20space%20using%20OpenStreetMap.md
-# and also including nodes within the polygon
+# and also including nodes within the polygon and in any case the nearest node
 # (note that 'buffered.links' is a parameter - need to buffer links before invoking the function)
 
 findEntryNodes <- function(destination.type, 
@@ -9,9 +9,9 @@ findEntryNodes <- function(destination.type,
                            nodes, 
                            buffered.links) {
   
-  # destination.type = "district_sport"
+  # destination.type = "park"
   # polygons = baseline.locations[1:10, ]
-  # nodes = network.nodes
+  # nodes = network.nodes.cycle
   # buffered.links = st_buffer(network.links, 30)
   
   # report progress
@@ -38,8 +38,11 @@ findEntryNodes <- function(destination.type,
   pseudo.entry.nodes <- 
     nodes$id[st_nearest_feature(pseudo.entry.points, nodes)]
   
-  # entry nodes are internal nodes and pseudo entry nodes combined
-  entry.nodes <- unique(c(internal.nodes, pseudo.entry.nodes))
+  # nearest nodes (in case there are no internal or pseudo entry nodes)
+  nearest.nodes <- nodes$id[st_nearest_feature(polygons, nodes)]
+  
+  # entry nodes are internal nodes, pseudo entry and nearest nodes combined
+  entry.nodes <- unique(c(internal.nodes, pseudo.entry.nodes, nearest.nodes))
   
   return(entry.nodes)
   

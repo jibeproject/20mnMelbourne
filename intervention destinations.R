@@ -3,9 +3,10 @@
 #------------------------------------------------------------------------------#
 # Process ----
 # •	For each destination type, identify the ACs that failed the test.
-# •	‘Fail the test’ means that 80% of dwellings in an AC are not within the 
-#    required walking distance (400m, 600m or 800m as applicable) of the 
-#    relevant destination type.
+#   o	‘Fail the test’ means that 80% of people in an AC are not within the 
+#     required walking distance (400m, 600m or 800m as applicable) of the 
+#     relevant destination type.
+#
 # •	Order the failed ACs.  
 #   o	For destinations where 400m walking distance is required (restaurant_cafe, 
 #     bus, convenience_store, park, gp), order small to large: a large AC 
@@ -14,16 +15,21 @@
 #     large AC should contain these, so they are accessible to small ACs within it.  
 #   o	Within each size category, order by neediest first, with the aim of 
 #     maximising the possibility of a new destination also helping other ACs 
-#     pass the test. ‘Neediest’ is lowest percentage of dwellings within the 
-#     required distance and, in case of equality, highest number of dwellings.
+#     pass the test. ‘Neediest’ is lowest percentage of addresses within the 
+#     required distance and, in case of equality, highest number of failed addresses
+#   o	In order to assess sensitivity to order, can run as 'small first' and 
+#     'large first' for all destination types, and then assemble the desired mix
+#     from their outputs (instead of running again as 'mixed').
+#
 # •	For each ‘failed AC’:
 #   o	Test whether the AC now passes the test, taking account of any new 
 #     destinations that may already have been added (functions/testFailedAc.R). 
 #   o	If it fails the test, identify the ‘failed addresses’ that are not within 
 #     the required distance.  Add a new location at the node which maximises the 
-#     number of failed addresses that are now reachable within the required distance 
+#     number of people that are now reachable within the required distance 
 #     and, if several nodes reach the same maximum number, select the one which 
-#     minimises the sum of the distances for all failed addresses (functions/addLocation.R).  
+#     minimises the sum of the distances (weighted by the number of people for
+#     each address) for all failed addresses (functions/addLocation.R).  
 #     Re-test, and continue adding locations until the test is met.
 #   o	When searching for the best location node, candidate nodes are:
 #     	for supermarket, butcher, bakery, pharmacy or post for all ACs; or 
@@ -33,6 +39,18 @@
 #       park) or 800m (otherwise) of the failed addresses.
 #   o	Include any added locations in the dataframe of new destinations, which 
 #     are used when re-testing the current AC and testing further ACs. 
+#
+# • Save output locations: 'output/intervention locations.sqlite': along with
+#   tables for each of the alternative orders 'output/intervention locations small first.sqlite'
+#   and 'output/intervention locations large first.sqlite'
+#
+# • Build output tables, saved as 'output/intervention tables.xlsx':
+#   o	'added destinations' (section 3.1): number of added destinations of each 
+#     type, joined to baseline results for numbers of ACs meeting, or not meeting,
+#     the 80% target for each destination type
+#   o	'order comparison' (section 3.2): numbers of added destinations under 
+#     each of the 'small first' and 'large first' approaches
+#
 #------------------------------------------------------------------------------#
 
 
@@ -44,8 +62,9 @@ library(dplyr)
 library(fs)
 library(sf)
 library(igraph)
+library(openxlsx)
 
-library(ggplot2)  # testing only
+# library(ggplot2)  # testing only
 
 
 ## 1.2 Functions ----
@@ -58,6 +77,12 @@ dir_walk(path = "./functions/", source, recurse = T, type = "file")
 PROJECT.CRS <- 28355
 BUFFDIST.SMALL <- 400  # distance to buffer small ACs
 BUFFDIST.MED.LARGE <- 800  # distance to buffer medium and large ACs
+
+# ordering parameter - select one
+# processing.order <- "neediest-first"
+# processing.order <- "least-needy-first"
+processing.order <- "small-first"
+# processing.order <- "large-first"
 
 
 ## 1.4 Data ----
@@ -83,12 +108,14 @@ ac.catchment.address.location <- "./output/ac_catchment_addresses.rds"
 ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 
 
-# baseline AC coverage
-baseline.AC.coverage <- read.csv("./output/20mn baseline AC coverage.csv")
-
+# baseline AC coverage (note that this is % of people (not dwellings) within 
+# the required walking distance of each dwelling type)
+baseline.output.location <- "./output/baseline assessment.xlsx"
+baseline.AC.coverage <- read.xlsx(baseline.output.location, 
+                                  sheet = "AC coverage pop")
 
 # destinations
-POIs.location <- "../data/processed/Weighted POIs/poi.gpkg"
+POIs.location <- "../data/processed/Destinations weights/Baseline/poi_weight.gpkg"
 ANLS.pos.location <- 
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
 ANLS.dest.location <- 
@@ -109,19 +136,14 @@ destination.types <- baseline.destinations[[1]]
 
 
 # load  network, and filter to region buffer
-links <- st_read("../data/processed/edgesMelbourne.gpkg") %>%
+links <- st_read("../data/processed/melbourneClipped_edges.sqlite") %>%
   st_filter(region_buffer, .predicate = st_intersects) %>%
   # filter to walkable only
-  filter(is_walk == TRUE) %>%
-  # tidy names to those expected by functions
-  rename(from_id = from, to_id = to, id = edgeID, GEOMETRY = geom)
+  filter(is_walk == TRUE)
 
-nodes <- st_read("../data/processed/nodesMelbourne.gpkg") %>%
+nodes <- st_read("../data/processed/melbourneClipped_nodes.sqlite") %>%
   # only those used in links
-  filter(nodeID %in% links$from_id | nodeID %in% links$to_id) %>%
-  # tidy names to those expected by functions
-  rename(id = nodeID, GEOMETRY = geom) %>%
-  mutate(x = st_coordinates(GEOMETRY)[,1], y = st_coordinates(GEOMETRY)[,2])
+  filter(id %in% links$from_id | id %in% links$to_id)
 
 # keep just the largest connected network
 network <- largestConnectedComponent(nodes, links)
@@ -141,16 +163,40 @@ g <- graph_from_data_frame(g.links, directed = F)
 residential.address.location <- "./output/residential_addresses.sqlite"
 residential.addresses <- st_read(residential.address.location)
 
-# intervention location
-intervention.location <- "./output/intervention locations.sqlite"
-
+# intervention locations (sqlites are for location of new destinations; xlsx
+# is for output tables)
+intervention.location.neediest.first <- "./output/intervention locations neediest first.sqlite"
+intervention.location.least.needy.first <- "./output/intervention locations least needy first.sqlite"
+intervention.location.small.first <- "./output/intervention locations small first.sqlite"
+intervention.location.large.first <- "./output/intervention locations large first.sqlite"
+intervention.location.final <- "./output/intervention locations.sqlite"
+intervention.tables.location <- "./output/intervention tables.xlsx"
 
 # 2 Add new destination locations ----
 # -----------------------------------------------------------------------------#
+## 2.1 Add locations ----
+## -----------------------------------------------------------------------------#
+# Order of processing depends on the 'processing.order' parameter.  See section
+# 2.2 for options to assemble a mixed output.
 
 for (i in 1:length(destination.types)) {
 # for (i in 2:4) { 
 # for (i in c(1, 14, 13)) {
+  
+  # set up intervention location (to write results)
+  # -----------------------------------#
+  if (processing.order == "neediest-first") {
+    intervention.location <- intervention.location.neediest.first
+  } else if (processing.order == "least-needy-first") {
+    intervention.location <- intervention.location.least.needy.first
+  } else if (processing.order == "small-first") {
+    intervention.location <- intervention.location.small.first
+  } else if (processing.order == "large-first") {
+    intervention.location <- intervention.location.large.first
+  } else {
+    print("The 'processing.order' parameter must be set as 'neediest-first', 'least-needy-first', 'small-first' or 'large-first'; terminating")
+    return()
+  }
   
   # set up destination type and failed ACs
   # -----------------------------------#
@@ -212,7 +258,7 @@ for (i in 1:length(destination.types)) {
     destination.type == "bus" ~ "bus.400.tram.600.train.800"
   )
   
-  # required distance for 80% of addresses
+  # required distance for 80% of people
   if (destination.type %in% c("convenience_store", "restaurant_cafe", "park")) {
     required.dist <- 400
   } else if (destination.type == "bus") {
@@ -239,15 +285,27 @@ for (i in 1:length(destination.types)) {
     dplyr::select(-address_ids) %>%
     mutate(size = factor(size, levels = c("small", "medium", "large")))
   
-  if (destination.type %in% c("convenience_store", "restaurant_cafe", "park", "bus")) {
+  if (processing.order == "neediest-first") {
     failed.ACs.ordered <- failed.ACs.with.details %>%
+      arrange(get(destination.field), desc(no.addresses))
+  } else if (processing.order == "least-needy-first") {
+    failed.ACs.ordered <- failed.ACs.with.details %>%
+      arrange(desc(get(destination.field)), no.addresses)
+  } else if (processing.order == "small-first") {
+    failed.ACs.ordered <- failed.ACs.with.details %>%
+      # combine ‘large’ and ‘medium’ as large, and convert to factors
+      mutate(size_group = ifelse(size == "small", "small", "large"))%>%
+      mutate(size_group = factor(size_group, levels = c("small", "large"))) %>%
       # small to large, then neediest
-      arrange(size, get(destination.field), desc(no.addresses))
-  }  else {
+      arrange(size_group, get(destination.field), desc(no.addresses))
+  } else if (processing.order == "large-first") {
     failed.ACs.ordered <- failed.ACs.with.details %>%
-      # large to small, then neediest
-      arrange(desc(size), get(destination.field), desc(no.addresses))
-  }
+      # combine ‘large’ and ‘medium’ as large, and convert to factors
+      mutate(size_group = ifelse(size == "small", "small", "large"))%>%
+      mutate(size_group = factor(size_group, levels = c("small", "large"))) %>%
+      # small to large, then neediest
+      arrange(dessc(size_group), get(destination.field), desc(no.addresses))
+  }  
   
   # for park (polygons), find entry nodes for baseline locations (see findEntryNodes.R for details)
   if (destination.type == "park") {
@@ -267,7 +325,7 @@ for (i in 1:length(destination.types)) {
   
   # report progress
   print(paste(Sys.time(), "| Finding new", destination.type, "locations for",
-              nrow(failed.ACs), "neighbourhood activity centres"))
+              nrow(failed.ACs), "activity centres"))
   
   # empty vector to hold new destinations that are added in the loop
   new.locations <- c()
@@ -311,7 +369,8 @@ for (i in 1:length(destination.types)) {
                                  network.links,
                                  g,
                                  required.dist,
-                                 entry.nodes)
+                                 entry.nodes,
+                                 mode = "people")
     
     test.result <- test.outputs[[1]]
     failed.addresses <- test.outputs[[2]]
@@ -341,7 +400,8 @@ for (i in 1:length(destination.types)) {
                                           network.links,
                                           buffered.links,
                                           g,
-                                          required.dist)
+                                          required.dist,
+                                          mode = "people")
       new.location <- new.location.outputs[[1]]
       new.entry.nodes <- new.location.outputs[[2]]
       
@@ -363,7 +423,8 @@ for (i in 1:length(destination.types)) {
                                    network.links,
                                    g,
                                    required.dist,
-                                   entry.nodes)
+                                   entry.nodes,
+                                   mode = "people")
       
       test.result <- test.outputs[[1]]
       failed.addresses <- test.outputs[[2]]
@@ -379,41 +440,162 @@ for (i in 1:length(destination.types)) {
 }
 
 
-# 3 Summary table of number of new destination locations ----
+## 2.2 Assemble final locations ----
+## -----------------------------------------------------------------------------#
+# Option if final locations are being assembled from 'small-first' and 'large-first'
+# (adapt if assembled in some other way)
+
+for (i in 1:length(destination.types)) {
+  destination.type <- destination.types[i]
+  
+  # read in the relevant layer
+  if (destination.type %in% c("convenience_store", "restaurant_cafe", "park", "bus")) {
+    if (destination.type %in% st_layers(intervention.location.small.first)$name) {
+      dest.layer <- st_read(intervention.location.small.first, layer = destination.type)
+      
+      # write to final location
+      st_write(dest.layer,
+               intervention.location.final, layer = destination.type,
+               delete_layer = TRUE)
+    }
+  }  else {
+    if (destination.type %in% st_layers(intervention.location.large.first)$name) {
+      dest.layer <- st_read(intervention.location.large.first, layer = destination.type)
+      
+      # write to final location
+      st_write(dest.layer,
+               intervention.location.final, layer = destination.type,
+               delete_layer = TRUE)
+    }
+  }
+}
+
+# Using neediest-first as final
+for (i in 1:length(destination.types)) {
+  destination.type <- destination.types[i]
+  
+  if (destination.type %in% st_layers(intervention.location.neediest.first)$name) {
+    # read in the relevant layer
+    dest.layer <- st_read(intervention.location.neediest.first, layer = destination.type)
+    
+    # write to final location
+    st_write(dest.layer,
+             intervention.location.final, layer = destination.type,
+             delete_layer = TRUE)
+  }
+}
+
+# BUT ALSO CONSIDER doing the comparison table in 3.2, then assembling the final from the lowest?
+
+
+# 3 Output tables ----
 # -----------------------------------------------------------------------------#
-# vector of names of all layers
-new.location.layers <- st_layers(intervention.location) %>%
-  .$name
 
-# empty dataframe to hold locations
-new.locations <- c()
-
-# add each layer to the empty dataframe
-for (i in 1:length(new.location.layers)) {
-  # read in the layer
-  assign(new.location.layers[i], st_read(intervention.location,
-                                         layer = new.location.layers[i]))
-  # layer without geometry
-  layer.locations <- get(new.location.layers[i]) %>%
-    st_drop_geometry()
-  # add to the dataframe
-  new.locations <- bind_rows(new.locations, layer.locations)
+## 3.0 Set up output workbook (required for all parts of section 3) ----
+## ------------------------------------#
+# read in if it exists, or create if not
+if (file.exists(intervention.tables.location)) {
+  wb <-loadWorkbook(intervention.tables.location)
+} else {
+  wb <- createWorkbook()
 }
 
 
-summary <- new.locations %>%
-  # numebr of each destination type
-  group_by(dest_type) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  # desired order
-  mutate(dest_type = factor(dest_type, 
-                            levels = c("supermarket", "pharmacy", "post", "gp",
-                                       "maternal_child_health", "dentist",
-                                       "childcare", "kindergarten", "primary", 
-                                       "community_centre", "convenience_store", 
-                                       "cafe", "park", "bus"))) %>%
-  arrange(dest_type)
+## 3.1 Summary table of number of new destination locations ----
+## -----------------------------------------------------------------------------#
+# read in baseline results (no and % meeting target, and shortfall)
+baseline.table <- 
+  read.xlsx(baseline.output.location, sheet = "AC coverage summ pop") %>%
+  dplyr::select(dest.dist, all.no, all.pct, all.shortfall)
+
+# summarise number of each new destination type
+new.location.summary <- locationSummary(intervention.location.final)
+
+# prepare new locations for final table
+new.location.summary.tidied <- new.location.summary %>%
+  # names corresponding to baseline names
+  mutate(dest.dist = case_when(
+    dest_type == "supermarket"  ~ "Supermarket",
+    dest_type == "pharmacy"     ~ "Pharmacy",
+    dest_type == "post"         ~ "Post office",
+    dest_type == "gp"           ~ "GP",
+    dest_type == "maternal_child_health" ~ "Maternal & child health centre",
+    dest_type == "dentist"      ~ "Dentist",
+    dest_type == "childcare"    ~ "Childcare centre",
+    dest_type == "kindergarten" ~ "Kindergarten",
+    dest_type == "primary"      ~ "Primary school",
+    dest_type == "community_centre"   ~ "Community centre or library",
+    dest_type == "convenience_store"  ~ "Convenience store or supermarket",
+    dest_type == "cafe"         ~ "Restaurant or cafe",
+    dest_type == "park"         ~ "Local park",
+    dest_type == "bus"          ~ "Bus stop, tram stop or train station"
+  )) %>%
+  dplyr::select(dest.dist, added.dest)
+
+# combine baseline and new location tables
+added.destinations <- baseline.table %>%
+  left_join(new.location.summary.tidied, by = "dest.dist")
 
 # write output
-write.csv(summary, "./output/20mn intervention location summary.csv", row.names = FALSE)
+# add worksheet with required name if not already there
+added.dest.name <- "added destinations"
+
+if (!added.dest.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = added.dest.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = added.dest.name, added.destinations)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, intervention.tables.location, overwrite = TRUE)
+
+
+## 3.2 Comparison table of different approaches ----
+## -----------------------------------------------------------------------------#
+# summarise numebrs of new destinations for each of small and large first
+neediest.first.table <- locationSummary(intervention.location.neediest.first) %>%
+  rename(neediest.first = added.dest)
+least.needy.first.table <- locationSummary(intervention.location.least.needy.first) %>%
+  rename(least.needy.first = added.dest)
+small.first.table <- locationSummary(intervention.location.small.first) %>%
+  rename(small.first = added.dest)
+large.first.table <- locationSummary(intervention.location.large.first) %>%
+  rename(large.first = added.dest)
+
+# combine
+order.comparison.table <- neediest.first.table %>%
+  left_join(least.needy.first.table, by = "dest_type") %>%
+  left_join(small.first.table, by = "dest_type") %>%
+  left_join(large.first.table, by = "dest_type") %>%
+  # order dest_type column for display
+  mutate(dest_type = factor(dest_type, 
+                            levels = c("supermarket", "pharmacy", "post", "gp",
+                                       "maternal_child_health", "dentist", "childcare",
+                                       "kindergarten", "primary", "community_centre",
+                                       "convenience_store", "cafe", "park", "bus",
+                                       "total"))) %>%
+  arrange(dest_type)
+
+##  would it be good to add a final column saying which is the lowest?  testing
+for (i in 1:nrow(order.comparison.table)) {
+  row <- order.comparison.table[i, ] %>% dplyr::select(-dest_type)
+  lowest.col <- colnames(row)[which.min(row[1, ])]  # not quite sure about this - do I need the 1?
+  order.comparison.table[i, "lowest"] <- lowest.col
+}
+
+# write output
+# add worksheet with required name if not already there
+order.comp.name <- "order comparison"
+
+if (!order.comp.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = order.comp.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = order.comp.name, order.comparison.table)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, intervention.tables.location, overwrite = TRUE)
+
+

@@ -16,6 +16,13 @@ calculateCoverage <- function(residential.addresses,
   # region = region
   # mode = "people"
   
+  # exit if mode not correctly set
+  if (!mode %in% c("people", "dwellings")) {
+    print(paste0("Not configured for mode ", mode, "; terminating"))
+    return()
+    
+  }
+  
   # join residential addresses and distances
   residential.distances <- residential.addresses %>%
     dplyr::select(id) %>%
@@ -35,8 +42,8 @@ calculateCoverage <- function(residential.addresses,
   AC <- residential.distances %>%
     # filter to all address ids comprising the ac catchments
     filter(id %in% (ac.catchment.addresses$address_ids %>% 
-             unlist() %>% 
-             unique()))
+                      unlist() %>% 
+                      unique()))
   
   large <- residential.distances %>%
     # filter to address ids comprising the large ac catchments
@@ -65,114 +72,75 @@ calculateCoverage <- function(residential.addresses,
   
   areas = c("melb", "AC", "large", "medium", "small")
   
+  # build table
+  area.coverage <- c()
+  
+  for (i in 1:length(areas)) {
+    area_data <- get(areas[i]) %>% st_drop_geometry()
+    
+    # add unit column depending on mode
+    if (mode == "people") {
+      area_data <- area_data %>%
+        mutate(unit = pop_wt)
+    } else if (mode == "dwellings") {
+      area_data <- area_data %>%
+        mutate(unit = dwel_wt)
+    }
+    
+    units = sum(area_data$unit)
+    
+    supermarket = sum(area_data %>% filter(supermarket <= 800) %>% .$unit)
+    pharmacy = sum(area_data %>% filter(pharmacy <= 800) %>% .$unit)
+    post = sum(area_data %>% filter(post <= 800) %>% .$unit)
+    gp = sum(area_data %>% filter(gp <= 800) %>% .$unit)
+    mat.child.health = sum(area_data %>% filter(maternal_child_health <= 800) %>% .$unit)
+    dentist = sum(area_data %>% filter(dentist <= 800) %>% .$unit)
+    childcare = sum(area_data %>% filter(childcare <= 800) %>% .$unit)
+    kindergarten = sum(area_data %>% filter(kindergarten <= 800) %>% .$unit)
+    primary = sum(area_data %>% filter(primary <= 800) %>% .$unit)
+    comm.library = sum(area_data %>% filter(community_centre_library <= 800) %>% .$unit)
+    convenience = sum(area_data %>% filter(supermarket <= 400 | convenience_store <= 400) %>% .$unit)
+    rest.cafe = sum(area_data %>% filter(restaurant_cafe <= 400) %>% .$unit)
+    park = sum(area_data %>% filter(park <= 400) %>% .$unit)
+    bus.tram.train = sum(area_data %>% filter(bus <= 400 | tram <= 600 | train <= 800) %>% .$unit)
+    
+    output.row <- data.frame(
+      area = areas[i],
+      units = units,
+      supermarket.800 = supermarket / units * 100,
+      pharmacy.800 = pharmacy / units * 100,
+      post.800 = post / units * 100,
+      gp.800 = gp / units * 100,
+      mat.child.health.800 = mat.child.health / units * 100,
+      dentist.800 = dentist / units * 100,
+      childcare.800 = childcare / units * 100,
+      kindergarten.800 = kindergarten / units * 100,
+      primary.800 = primary / units * 100,
+      comm.library.800 = comm.library / units * 100,
+      convenience.400 = convenience / units * 100,
+      rest.cafe.400 = rest.cafe / units * 100,
+      park.400 = park / units * 100,
+      bus.400.tram.600.train.800 = bus.tram.train / units * 100
+    )
+    
+    area.coverage <- rbind(area.coverage, output.row)
+  }
+  
+  # move people column to end
+  area.coverage <- area.coverage %>%
+    relocate(units, .after = last_col())
+  
+  # rename units column according to mode
   if (mode == "people") {
-    
-    # build table
-    area.coverage <- c()
-    
-    for (i in 1:length(areas)) {
-      area_data <- get(areas[i]) %>% st_drop_geometry()
-      people = sum(area_data$pop_wt)
-      
-      supermarket = sum(area_data %>% filter(supermarket <= 800) %>% .$pop_wt)
-      pharmacy = sum(area_data %>% filter(pharmacy <= 800) %>% .$pop_wt)
-      post = sum(area_data %>% filter(post <= 800) %>% .$pop_wt)
-      gp = sum(area_data %>% filter(gp <= 800) %>% .$pop_wt)
-      mat.child.health = sum(area_data %>% filter(maternal_child_health <= 800) %>% .$pop_wt)
-      dentist = sum(area_data %>% filter(dentist <= 800) %>% .$pop_wt)
-      childcare = sum(area_data %>% filter(childcare <= 800) %>% .$pop_wt)
-      kindergarten = sum(area_data %>% filter(kindergarten <= 800) %>% .$pop_wt)
-      primary = sum(area_data %>% filter(primary <= 800) %>% .$pop_wt)
-      comm.library = sum(area_data %>% filter(community_centre_library <= 800) %>% .$pop_wt)
-      convenience = sum(area_data %>% filter(supermarket <= 400 | convenience_store <= 400) %>% .$pop_wt)
-      rest.cafe = sum(area_data %>% filter(restaurant_cafe <= 800) %>% .$pop_wt)
-      park = sum(area_data %>% filter(park <= 800) %>% .$pop_wt)
-      bus.tram.train = sum(area_data %>% filter(bus <= 400 | tram <= 600 | train <= 800) %>% .$pop_wt)
-      
-      output.row <- data.frame(
-        area = areas[i],
-        people = people,
-        supermarket.800 = supermarket / people * 100,
-        pharmacy.800 = pharmacy / people * 100,
-        post.800 = post / people * 100,
-        gp.800 = gp / people * 100,
-        mat.child.health.800 = mat.child.health / people * 100,
-        dentist.800 = dentist / people * 100,
-        childcare.800 = childcare / people * 100,
-        kindergarten.800 = kindergarten / people * 100,
-        primary.800 = primary / people * 100,
-        comm.library.800 = comm.library / people * 100,
-        convenience.400 = convenience / people * 100,
-        rest.cafe.400 = rest.cafe / people * 100,
-        park.400 = park / people * 100,
-        bus.400.tram.600.train.800 = bus.tram.train / people * 100
-      )
-      
-      area.coverage <- rbind(area.coverage, output.row)
-    }
-    
-    # move people column to end
     area.coverage <- area.coverage %>%
-      relocate(people, .after = last_col())
-
+      rename(people = units)
   } else if (mode == "dwellings") {
-    
-    # build table
-    area.coverage <- c()
-    
-    for (i in 1:length(areas)) {
-      area_data <- get(areas[i]) %>% st_drop_geometry()
-      dwellings = sum(area_data$dwel_wt)
-      
-      supermarket = sum(area_data %>% filter(supermarket <= 800) %>% .$dwel_wt)
-      pharmacy = sum(area_data %>% filter(pharmacy <= 800) %>% .$dwel_wt)
-      post = sum(area_data %>% filter(post <= 800) %>% .$dwel_wt)
-      gp = sum(area_data %>% filter(gp <= 800) %>% .$dwel_wt)
-      mat.child.health = sum(area_data %>% filter(maternal_child_health <= 800) %>% .$dwel_wt)
-      dentist = sum(area_data %>% filter(dentist <= 800) %>% .$dwel_wt)
-      childcare = sum(area_data %>% filter(childcare <= 800) %>% .$dwel_wt)
-      kindergarten = sum(area_data %>% filter(kindergarten <= 800) %>% .$dwel_wt)
-      primary = sum(area_data %>% filter(primary <= 800) %>% .$dwel_wt)
-      comm.library = sum(area_data %>% filter(community_centre_library <= 800) %>% .$dwel_wt)
-      convenience = sum(area_data %>% filter(supermarket <= 400 | convenience_store <= 400) %>% .$dwel_wt)
-      rest.cafe = sum(area_data %>% filter(restaurant_cafe <= 800) %>% .$dwel_wt)
-      park = sum(area_data %>% filter(park <= 800) %>% .$dwel_wt)
-      bus.tram.train = sum(area_data %>% filter(bus <= 400 | tram <= 600 | train <= 800) %>% .$dwel_wt)
-      
-      output.row <- data.frame(
-        area = areas[i],
-        dwellings = dwellings,
-        supermarket.800 = supermarket / dwellings * 100,
-        pharmacy.800 = pharmacy / dwellings * 100,
-        post.800 = post / dwellings * 100,
-        gp.800 = gp / dwellings * 100,
-        mat.child.health.800 = mat.child.health / dwellings * 100,
-        dentist.800 = dentist / dwellings * 100,
-        childcare.800 = childcare / dwellings * 100,
-        kindergarten.800 = kindergarten / dwellings * 100,
-        primary.800 = primary / dwellings * 100,
-        comm.library.800 = comm.library / dwellings * 100,
-        convenience.400 = convenience / dwellings * 100,
-        rest.cafe.400 = rest.cafe / dwellings * 100,
-        park.400 = park / dwellings * 100,
-        bus.400.tram.600.train.800 = bus.tram.train / dwellings * 100
-      )
-      
-      area.coverage <- rbind(area.coverage, output.row)
-    }
-    
-    # move dwellings column to end
     area.coverage <- area.coverage %>%
-      relocate(dwellings, .after = last_col())
-      
-  } else {
-    
-    print(paste0("Not configured for mode ", mode, "; terminating"))
-    return()
+      rename(dwellings = units)
   }
   
   area.coverage <- area.coverage %>%
-
+    
     # transpose table
     t() %>%
     as.data.frame() %>%
@@ -204,7 +172,10 @@ calculateCoverage <- function(residential.addresses,
            )) %>%
     
     # move text column to front
-    relocate(dest.dist)
+    relocate(dest.dist) %>%
+    
+    # reconvert relevant columns to numeric
+    mutate(across(-dest.dist, as.numeric))
   
   return(area.coverage)
   

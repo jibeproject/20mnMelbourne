@@ -9,13 +9,21 @@ testFailedAc <- function(AC.addresses,
                          network.links,
                          g,
                          required.dist,
-                         entry.nodes) {  
+                         entry.nodes,
+                         mode) {  
+  
+  
+  # exit if mode not correctly set
+  if (!mode %in% c("people", "dwellings")) {
+    print(paste0("Not configured for mode ", mode, "; terminating"))
+    return()
+  }
   
   # set up addresses and destinations
   # -----------------------------------#
   
   # unique AC address network nodes
-  address.nodes <- unique(AC.addresses$address.n.node)   
+  address.nodes <- unique(AC.addresses$walk_node)   
   
   # nodes representing destinations: separate bus, tram and train for bus;
   # pre-calculated entry nodes for polygons; otherwise nearest nodes to features
@@ -183,28 +191,38 @@ testFailedAc <- function(AC.addresses,
     
     # join to AC addresses
     AC.addresses.with.dist <- AC.addresses %>%
-      left_join(min.dist, by = c("address.n.node" = "id"))
+      left_join(min.dist, by = c("walk_node" = "id"))
     
-    # test whether at least 80% of distances are within required.dist
+    # add unit column depending on mode
+    if (mode == "people") {
+      AC.addresses.with.dist <- AC.addresses.with.dist %>%
+        mutate(unit = pop_wt)
+    } else if (mode == "dwellings") {
+      AC.addresses.with.dist <- AC.addresses.with.dist %>%
+        mutate(unit = dwel_wt)
+    }
+    
+    
+    # test whether at least 80% of people are within required.dist
     
     if (destination.type == "bus") {
       
-      # if bus - are 80% within required distance for any mode ('required.dist'
-      # is a vector with separate distances for each mode)
+      # if bus - are 80% of people within required distance for any mode 
+      # ('required.dist' is a vector with separate distances for each mode)
       
-      test.result <- nrow(AC.addresses.with.dist %>%
+      test.result <- sum(AC.addresses.with.dist %>%
                             filter(bus <= required.dist[1] |
                                      tram <= required.dist[2] |
-                                     train <= required.dist[3])) / 
-        nrow(AC.addresses.with.dist) >= 0.8
-      
+                                     train <= required.dist[3]) %>%
+                           .$unit) / sum(AC.addresses.with.dist$unit) >= 0.8
+
     } else {
       
-      # otherwise (ie not bus) - are 80% within required distance
+      # otherwise (ie not bus) - are 80% of people within required distance
       
-      test.result <- nrow(AC.addresses.with.dist %>%
-                            filter(distance <= required.dist[1])) /
-        nrow(AC.addresses.with.dist) >= 0.8
+      test.result <- sum(AC.addresses.with.dist %>%
+                           filter(distance <= required.dist[1]) %>%
+                           .$unit) / sum(AC.addresses.with.dist$unit) >= 0.8
       
     }
     

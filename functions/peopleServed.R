@@ -1,14 +1,41 @@
 # function to find dwellings within required distance of destinations
 
-destinationDwellings <- function(destinations,
-                                 residential.addresses,
-                                 network.nodes,
-                                 network.links, 
-                                 PROJECT.CRS) {
+peopleServed <- function(destinations,
+                         residential.addresses,
+                         network.nodes,
+                         network.links, 
+                         PROJECT.CRS,
+                         transport,
+                         mode) {
+  # 
+  #   destinations = baseline.destinations
+  #   network.nodes = network.nodes.walk
+  #   network.links = network.links.walk
+  #   transport = "walk"
+  #   mode = "people"
   
-  # destinations = intervention.destinations
-  # network.nodes = network.nodes.walk
-  # network.links = network.links.walk
+  # set up for 'transport' and 'mode' choices
+  # ---------------------------------#
+  
+  # exit if transport or mode not correctly set
+  if (!transport %in% c("walk", "cycle")) {
+    print(paste0("Not configured for transport mode ", transport, "; terminating"))
+    return()
+  }
+  
+  if (!mode %in% c("people", "dwellings")) {
+    print(paste0("Not configured for mode ", mode, "; terminating"))
+    return()
+  }
+  
+  # add unit column to residential addresses depending on mode 
+  if (mode == "people") {
+    residential.addresses <- residential.addresses %>%
+      mutate(unit = pop_wt)
+  } else if (mode == "dwellings") {
+    residential.addresses <- residential.addresses %>%
+      mutate(unit = dwel_wt)
+  }
   
   # unpack "destinations"
   # ---------------------------------#
@@ -30,8 +57,11 @@ destinationDwellings <- function(destinations,
   print(paste(Sys.time(), "| getting unique residential addresses nodes"))
   
   # unique residential address nodes
-  residential.nodes <- unique(residential.addresses$address.n.node)   
-  
+  if (transport == "walk") {
+    residential.nodes <- unique(residential.addresses$walk_node)   
+  } else if (transport == "cycle") {
+    residential.nodes <- unique(residential.addresses$cycle_node)   
+  }
   
   # create the graph for finding distances (undirected as used for walking distance catchment)
   # ---------------------------------#
@@ -49,14 +79,14 @@ destinationDwellings <- function(destinations,
   # make directory to hold temporary outputs for each destination type
   # ---------------------------------#
   
-  dir.create("./catchment dwellings")
+  dir.create("./destination catchments")
   
   
   # loop to find distances for each destination
   # ---------------------------------#
   
   for (i in 1:length(destination.types)) {
-    # for (i in c(13:13)) {
+    # for (i in c(13:16)) {
     
     # report progress
     print(paste(Sys.time(), "|", destination.types[i], "- loading destinations"))
@@ -66,13 +96,25 @@ destinationDwellings <- function(destinations,
       st_sf() %>%
       st_set_crs(PROJECT.CRS)
     
-    # catchment distance for destination type
+    # catchment distance for destination type and transport
     if (destination.types[i] %in% c("convenience_store", "restaurant_cafe", "park", "bus")) {
-      catchment.dist <- 400
+      if (transport == "walk") {
+        catchment.dist <- 400
+      } else if (transport == "cycle") {
+        catchment.dist <- 1250
+      }
     } else if (destination.types[i] == "tram") {
-      catchment.dist <- 600
+      if (transport == "walk") {
+        catchment.dist <- 600
+      } else if (transport == "cycle") {
+        catchment.dist <- 1875
+      }
     } else {
-      catchment.dist <- 800
+      if (transport == "walk") {
+        catchment.dist <- 800
+      } else if (transport == "cycle") {
+        catchment.dist <- 2500
+      }
     }
     
     # buffered links for parks (to find entry nodes)
@@ -81,18 +123,18 @@ destinationDwellings <- function(destinations,
     }
     
     for (j in 1:nrow(destination)) {
-      # for (j in 1:10) {
+      # for (j in 1:200) {
       # relevant location
-      new.location <- destination[j, ]
+      location <- destination[j, ]
       
       # nearest node(s)
       if (destination.types[i] == "park") {
         from.node <- findEntryNodes("park",
-                                    new.location,
+                                    location,
                                     network.nodes,
                                     buffered.links)
       } else {
-        from.node <- network.nodes$id[st_nearest_feature(new.location, network.nodes)]
+        from.node <- network.nodes$id[st_nearest_feature(location, network.nodes)]
       }
       
       # find distances from the destination node(s) ('from_node') to the residential nodes
@@ -119,45 +161,52 @@ destinationDwellings <- function(destinations,
         # filter to those within catchment distance
         filter(dist <= catchment.dist)
       
-      # for each catchment node, find the number of addresses for which it is the nearest node
-      catchment.addresses <- nrow(residential.addresses %>%
-                                    filter(address.n.node %in% catchment.nodes$node))
+      # for each catchment node, find the addresses for which it is the nearest node
+      if (transport == "walk") {
+        catchment.addresses <- residential.addresses %>%
+          filter(walk_node %in% catchment.nodes$node)
+      } else if (transport == "cycle") {
+        catchment.addresses <- residential.addresses %>%
+          filter(cycle_node %in% catchment.nodes$node)
+      }
       
-      destination$dwel_served[j] <- catchment.addresses
+      # catchment.addresses <- nrow(residential.addresses %>%
+      #                               filter(address.n.node %in% catchment.nodes$node))
+      # complete the 'served' column with the number of people (or dwellings), using the weight
+      destination$served[j] <- sum(catchment.addresses$unit)
       
       if (j %% 50 == 0) {
-        print(paste(Sys.time(), "|", destination.types[i], "- found dwellings served by",
+        print(paste(Sys.time(), "|", destination.types[i], "- found", mode, "served by",
                     j, "of", nrow(destination)))
       }
     }
     
     # write output to temporary directory
-    saveRDS(destination, paste0("./catchment dwellings/dest_", destination.types[i], ".rds"))
+    saveRDS(destination, paste0("./destination catchments/dest_", destination.types[i], ".rds"))
   }
   
-  # assemble table of dwellings served for all destination types
+  # assemble table of people (or dwellings) served for all destination types
   # ---------------------------------#
   # report progress
-  print(paste(Sys.time(), "|", "assembling dwellings served for all destination types"))
+  print(paste(Sys.time(), "|", "assembling", mode, "served for all destination types"))
   
-  for (i in 1:length(list.files("./catchment dwellings"))) {
-    catch.dwel.file <- readRDS(paste0("./catchment dwellings/", list.files("./catchment dwellings")[i]))
+  for (i in 1:length(list.files("./destination catchments"))) {
+    served.file <- readRDS(paste0("./destination catchments/", list.files("./destination catchments")[i]))
     if (i == 1) {
-      catchment.dwellings <- catch.dwel.file
+      served <- served.file
     } else {
-      catchment.dwellings <- bind_rows(catchment.dwellings,
-                                       catch.dwel.file)
+      served <- bind_rows(served, served.file)
     }
   }
   
   # add a unique id field
-  catchment.dwellings <- catchment.dwellings %>%
+  served <- served %>%
     mutate(dest_id = row_number())
   
-  # remove the catchment dwellings folder
-  unlink("./catchment dwellings", recursive = TRUE) 
+  # remove the destination catchments folder
+  unlink("./destination catchments", recursive = TRUE) 
   
-  return(catchment.dwellings)
+  return(served)
   
 }
 

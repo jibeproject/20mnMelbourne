@@ -8,13 +8,13 @@ addressDestinationDistances <- function(destinations,
                                         multiple.destinations = NA,
                                         mode = "walk") {
 # 
-  # destinations = all.destinations
+  # destinations = baseline.destinations
   # residential.addresses = residential.addresses
   # network.nodes = network.nodes.cycle
   # network.links = network.links.cycle
   # PROJECT.CRS = PROJECT.CRS
   # multiple.destinations <- list(c("restaurant_cafe", 4))
-  # mode = cycle
+  # mode = "cycle"
   
   
   # unpack "destinations"
@@ -83,7 +83,7 @@ addressDestinationDistances <- function(destinations,
   # ---------------------------------#
   
   for (i in 1:length(destination.types)) {
-  # for (i in c(13:13)) {
+  # for (i in c(14:16)) {
     
     # load destinations
     # ---------------------------------#
@@ -198,7 +198,7 @@ addressDestinationDistances <- function(destinations,
       
       # parallel loop
       # setup for parallel processing - detect no of available cores and create cluster
-      cores <- detectCores()
+      cores <- detectCores() 
       cluster <- parallel::makeCluster(cores)
       doSNOW::registerDoSNOW(cluster)
       

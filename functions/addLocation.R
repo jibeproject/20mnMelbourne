@@ -14,14 +14,21 @@ addLocation <- function(failed.addresses,
                         network.links,
                         buffered.links,
                         g,
-                        required.dist) {
+                        required.dist,
+                        mode) {
   
+  
+  # exit if mode not correctly set
+  if (!mode %in% c("people", "dwellings")) {
+    print(paste0("Not configured for mode ", mode, "; terminating"))
+    return()
+  }
   
   # set up addresses and candidate nodes
   # -----------------------------------#
   
   # unique AC address network nodes 
-  address.nodes <- unique(failed.addresses$address.n.node)
+  address.nodes <- unique(failed.addresses$walk_node)
   
   # network nodes that are potential destination locations
   # vector to hold outputs
@@ -58,7 +65,7 @@ addLocation <- function(failed.addresses,
   
   # report progress
   print(paste(Sys.time(), "| > Looking for", destination.type, "location for",
-              nrow(failed.addresses), "dwellings for centre no", AC$CENTRE_NO))
+              nrow(failed.addresses), "addresses for centre no", AC$CENTRE_NO))
 
 # sample plot - adjust XX wherever appears
 # outputXX <- ggplot() +
@@ -91,33 +98,56 @@ addLocation <- function(failed.addresses,
   address.dist <- address.node.dist %>%
     as.data.frame() %>%
     # address node column
-    mutate(address.n.node = as.numeric(row.names(.))) %>%
-    relocate(address.n.node) %>%
+    mutate(walk_node = as.numeric(row.names(.))) %>%
+    relocate(walk_node) %>%
     # join addresses
     full_join(failed.addresses %>% st_drop_geometry(), 
-              by = "address.n.node") %>%
+              by = "walk_node") %>%
     relocate(id)
+  
+  # add unit column depending on mode
+  if (mode == "people") {
+    address.dist <- address.dist %>%
+      mutate(unit = pop_wt) %>%
+      relocate(unit)
+  } else if (mode == "dwellings") {
+    address.dist <- address.dist %>%
+      mutate(unit = dwel_wt) %>%
+      relocate(unit)
+  }
+
+  # number of units (people) within required distance for each candidate node
+  candidate.unit.no <- data.frame(candidate.node = as.numeric(),
+                                  no.of.units = as.numeric())
+  for (i in 1:length(candidate.nodes)) {
+    candidate.node <- as.character(candidate.nodes[i])
+    # find the addresses within the required distance
+    addresses.within.distance <- address.dist %>%
+      # select the unit column, and the column with the distances for the candidate node
+      dplyr::select(id, unit, all_of(candidate.node)) %>%
+      # rename the candidate node column as 'distance'
+      setNames(c("id", "unit", "distance")) %>%
+      # filter to distance within required distance
+      filter(distance <= required.dist[1], na.rm = TRUE)
     
-  # number of addresses within required distance for each candidate node
-  # (columns are candidate nodes, so 2)
-  candidate.address.no <- apply(address.dist %>%
-                                dplyr::select(-id, -address.n.node), 
-                              2, 
-                              function(x) sum(x <= required.dist[1], na.rm = TRUE)) %>%
-    as.data.frame() %>%
-    cbind(candidate.node = as.numeric(row.names(.))) %>%
-    rename("no.of.addresses" = ".")
+    # add the number of units for the candidate node to the table
+    candidate.unit.no <- rbind(
+      candidate.unit.no,
+      cbind(candidate.node = as.numeric(candidate.node),
+            no.of.units = sum(addresses.within.distance$unit))
+    )
+  }
+
+  # nodes with the maximum number of units
+  max.units <- max(candidate.unit.no$no.of.units)
   
-  # nodes with the maximum number of addresses
-  max.addresses <- max(candidate.address.no$no.of.addresses)
-  
-  
+
   # loop to apply when core nodes used and none can find more addresses
   # [in principle, this could also arise for periphery nodes where all
   # are more than required distance from failed addresses, for example
   # along a single long highway - so far not encountered]
   # -----------------------------------#
-  if (max.addresses == 0) {
+  if (max.units == 0) {
     # use periphery nodes, and re-find max.addresses
     search.area <- st_buffer(failed.addresses, required.dist[1]) %>% 
       summarise()
@@ -135,31 +165,54 @@ addLocation <- function(failed.addresses,
     address.dist <- address.node.dist %>%
       as.data.frame() %>%
       # address node column
-      mutate(address.n.node = as.numeric(row.names(.))) %>%
-      relocate(address.n.node) %>%
+      mutate(walk_node = as.numeric(row.names(.))) %>%
+      relocate(walk_node) %>%
       # join addresses
       full_join(failed.addresses %>% st_drop_geometry(), 
-                by = "address.n.node") %>%
+                by = "walk_node") %>%
       relocate(id)
     
-    # number of addresses within required distance for each candidate node
-    # (columns are candidate nodes, so 2)
-    candidate.address.no <- apply(address.dist %>%
-                                    dplyr::select(-id, -address.n.node), 
-                                  2, 
-                                  function(x) sum(x <= required.dist[1], na.rm = TRUE)) %>%
-      as.data.frame() %>%
-      cbind(candidate.node = as.numeric(row.names(.))) %>%
-      rename("no.of.addresses" = ".")
+    # add unit column depending on mode
+    if (mode == "people") {
+      address.dist <- address.dist %>%
+        mutate(unit = pop_wt) %>%
+        relocate(unit)
+    } else if (mode == "dwellings") {
+      address.dist <- address.dist %>%
+        mutate(unit = dwel_wt) %>%
+        relocate(unit)
+    }
     
-    # nodes with the maximum number of addresses
-    max.addresses <- max(candidate.address.no$no.of.addresses)
+    # number of units (people) within required distance for each candidate node
+    candidate.unit.no <- data.frame(candidate.node = as.numeric(),
+                                    no.of.units = as.numeric())
+    for (i in 1:length(candidate.nodes)) {
+      candidate.node <- as.character(candidate.nodes[i])
+      # find the addresses within the required distance
+      addresses.within.distance <- address.dist %>%
+        # select the unit column, and the column with the distances for the candidate node
+        dplyr::select(id, unit, all_of(candidate.node)) %>%
+        # rename the candidate node column as 'distance'
+        setNames(c("id", "unit", "distance")) %>%
+        # filter to distance within required distance
+        filter(distance <= required.dist[1], na.rm = TRUE)
+      
+      # add the number of units for the candidate node to the table
+      candidate.unit.no <- rbind(
+        candidate.unit.no,
+        cbind(candidate.node = as.numeric(candidate.node),
+              no.of.units = sum(addresses.within.distance$unit))
+      )
+    }
+    
+    # nodes with the maximum number of units
+    max.units <- max(candidate.unit.no$no.of.units)
     
   }
   
   # best nodes are those which find the max number of addresses
-  best.candidate.nodes <- candidate.address.no %>%
-    filter(no.of.addresses == max.addresses) %>%
+  best.candidate.nodes <- candidate.unit.no %>%
+    filter(no.of.units == max.units) %>%
     .$candidate.node
   
   # find the winning node, which will be used for the new location
@@ -170,9 +223,13 @@ addLocation <- function(failed.addresses,
   
   } else {
     
-    # otherwise, find the one that minimises the distances for all failed addresses
+    # otherwise, find the one that minimises the distances for all failed units (people)
     distance.sums <- apply(address.dist %>%
-                             dplyr::select(as.character(best.candidate.nodes)),
+                             # unit and best candidate node columns
+                             dplyr::select(unit, as.character(best.candidate.nodes)) %>%
+                             # weight best candidate node columns by unit, and remove unit column
+                             mutate(across(as.character(best.candidate.nodes), ~ .x * unit)) %>%
+                             dplyr::select(-unit),
                            2,
                            sum, na.rm = TRUE) %>%
       as.data.frame() %>%
@@ -193,7 +250,7 @@ addLocation <- function(failed.addresses,
   
   # report progress
   print(paste(Sys.time(), "| > Found", destination.type, "location for",
-              max.addresses, "dwellings for centre no", AC$CENTRE_NO))
+              round(max.units), mode, "for centre no", AC$CENTRE_NO))
   
   # construct new location
   # -----------------------------------#

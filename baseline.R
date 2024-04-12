@@ -12,6 +12,7 @@
 #   o Identify nearest node to each address on walking and cycling networks.
 #   o	Add an ‘id’ field, for later linking to distances outputs.
 #   o	Result saved as output/residential_addresses.sqlite.
+#
 # •	Make catchment for each AC (section 3.1 and functions/makeAcCatchments.R).  
 #   o	Load  Activity Centre (AC) polygons and supermarkets
 #   o	Catchment distance is 400m (small AC) or 800m (medium or large AC)  
@@ -34,7 +35,14 @@
 #   o	Combine the outputs from all ACs into output/ac_catchment_addresses.rds 
 #     (a dataframe of lists of the address id’s for each AC) and 
 #     output/ac_catchment_polygons.sqlite (a dataframe of the polygons for the ACs).
-# •	Find distances between addresses and destinations (section 4 and functions/addressDestinationDistances.R).
+#
+# •	Make catchment for each AC using an alternative 'boundary' approach
+#   where anchors are not used, and instead the catchment is all address points
+#   within the required walking distance of the boundary of the AC (section 3.2 
+#   and functions/makeAcCatchments.R).  
+#
+# •	Find distances between addresses and destinations (section 4 and 
+#   functions/addressDestinationDistances.R).
 #   o	Load baseline destinations
 #   o	For each destination type, find its nearest node (for polygons, these are 
 #     the nearest nodes to pseudo entry points at 20m intervals along the boundary 
@@ -58,24 +66,48 @@
 #     	Save minimum distance for each destination to a temporary file, where it 
 #       can then be joined to residential addresses.
 #   o	Output saved as output/baseline_distances.csv
-# •	Build table showing overall area coverage as percentage of residences with 
-#   access to each destination type within specified distance for Greater Melbourne, 
-#   all ACs, and large, medium and small ACs (section 5.1 and 
-#   functions/calculateCoverage.R).  Output saved as output/20mn baseline area coverage.csv.
-# •	Find percentage of residences in each AC with access to each destination 
-#   type within specified walking distance (section 5.2 and functions/calculateAcCoverage.R).  
-#   Output saved as output /20mn baseline AC coverage.csv.
-# •	Build table showing summary of number and percentage of all, large, medium 
-#   and small ACs with 80% of residences with access to each destination type 
-#   within specified distance (section 5.3 and functions/calculateAcCoverageSummary.R).  
-#   Output saved as output /20mn baseline AC coverage summary.csv.
-# • Make boxplots investigating small ACs:
+#
+# • Build output tables, saved as output/baseline assessment.xlsx:
+#   o 'area coverage pop' (section 5.1 and functions/calculateCoverage.R): 
+#     overall area coverage as percentage of population with access to each
+#     destination type within specified distance for Greater Melbourne, all
+#     all ACs, and large, medium and small ACs
+#   o 'area coverage dwel' (section 5.1 and functions/calculateCoverage.R): 
+#     same, but as percentage of dwellings with access rather than population
+#
+#   o 'AC coverage pop' (section 5.2 and functions/calculateAcCoverage.R): 
+#     percentage of population in each AC with access to each destination 
+#     type within specified walking distance
+#   o 'AC coverage dwel' (section 5.2 and functions/calculateAcCoverage.R): 
+#     same, but as percentage of dwellings with access rather than population
+#   o 'AC coverage boundary' (section 5.4 and functions/calculateAcCoverage.R): 
+#     same, but as percentage of population with access based on AC catchments
+#     measured from AC boundaries rather than AC anchors
+#
+#   o 'AC coverage summ pop' (section 5.3 and functions/calculateAcCoverageSummary.R): 
+#     summary of number and percentage of all, large, medium and small ACs with 
+#     80% of population with access to each destination type within specified distance
+#   o 'AC coverage summ dwel' (section 5.3 and functions/calculateAcCoverageSummary.R): 
+#     same, but as number and percentage of dwellings rather than population
+#   o 'AC coverage summ boundary' (section 5.5 and functions/calculateAcCoverageSummary.R): 
+#     same, but as number and percentage of population with access based on AC catchments
+#     measured from AC boundaries rather than AC anchors
+#
+#   o 'AC shortfall comp' (section 5.6): comparison table of the numbers
+#     of ACs failing to meet the 80% target from each of the 'pop', 'dwel' and 
+#     'boundary' summary tables
+#   o 'AC shortfall comp grp' (section 5.7 and functions/calculateLgaGroupShortfalls):
+#     breakdown of the percentages of ACs failing to meet the 80% target for each
+#     of the 'pop' and 'boundary' methods, by inner/middle/outer LGA groups
+
+# • Make boxplots investigating small ACs (for each of population and dwelling counts):
 #   o	allocates a score, with 1 point for each of the 14 destination tests
 #   o	makes boxplot for the score for each of large, medium, small (2-5k) and 
 #     small (<2k), showing the score
 #   o	divides small according to whether under or over 50% overlap with 
 #     medium/large, and makes a second similar boxplot for them 
-#   Outputs saved as images/baseline_score.png and images/overlap_score.png
+#   Outputs saved as images/baseline_score_pop.png, images/baseline_score_dwel.png,
+#   images/overlap_score_pop.png and images/overlap_score_dwel.png
 
 #------------------------------------------------------------------------------#
 
@@ -129,15 +161,10 @@ ACs <- read_zipped_GIS(zipfile = "../data/original/MICLUP-NACs.zip",
 region_buffer <- st_read("../data/processed/region_buffer.sqlite")
 
 # load network, and filter to region buffer
-links <- st_read("../data/processed/edgesMelbourne.gpkg") %>%
-  st_filter(region_buffer, .predicate = st_intersects) %>%
-  # tidy names to those expected by functions
-  rename(from_id = from, to_id = to, id = edgeID, GEOMETRY = geom)
+links <- st_read("../data/processed/melbourneClipped_edges.sqlite") %>%
+  st_filter(region_buffer, .predicate = st_intersects)
 
-nodes <- st_read("../data/processed/nodesMelbourne.gpkg") %>%
-  # tidy names to those expected by functions
-  rename(id = nodeID, GEOMETRY = geom) %>%
-  mutate(x = st_coordinates(GEOMETRY)[,1], y = st_coordinates(GEOMETRY)[,2])
+nodes <- st_read("../data/processed/melbourneClipped_nodes.sqlite")
 
 links.walk <- links %>% filter(is_walk == TRUE)
 nodes.walk <- nodes %>% filter(id %in% links.walk$from_id | id %in% links.walk$to_id)
@@ -154,33 +181,44 @@ network.cycle <- largestConnectedComponent(nodes.cycle, links.cycle)
 network.nodes.cycle <- network.cycle[[1]]
 network.links.cycle <- network.cycle[[2]]
 
+# remove intermediate components (memory issues)
+rm(links, nodes, links.walk, nodes.walk, links.cycle, nodes.cycle,
+   network.walk, network.cycle)
 
-# address and region data locations
+# address, meshblock and region data locations
+# note - using 2016 meshblock census counts; could be updated to a later
+# census as part of a future general baseline data update 
 address.location <- "../data/original/VIC_ADDRESS_DEFAULT_GEOCODE_psv.psv"
 meshblock.location <- "../data/original/1270055001_mb_2016_vic_shape.zip"
 meshblock.count.location <- "../data/original/2016 census mesh block counts.csv"
 region.location <- "../data/processed/region.sqlite"
 
 # baseline points of interest location
-POIs.location <- "../data/processed/Weighted POIs/poi.gpkg"
+POIs.location <- "../data/processed/Destinations weights/Baseline/poi_weight.gpkg"
 ANLS.pos.location <- 
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
 ANLS.dest.location <- 
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
 
+# LGA location
+LGA.zipfile <- "../data/original/LGAs.zip"
+LGA.subpath <- "/mga94_55/esrishape/whole_of_dataset/victoria/VMADMIN"
+
 # residential addresses: set to F if using existing, or create in section 2
-find.residential.addresses <- T
+find.residential.addresses <- F
 residential.address.location <- "./output/residential_addresses.sqlite"
 
 # AC catchments: set to F if using existing, or create in section 3
-make.AC.catchments <- T
+make.AC.catchments <- F
 ac.catchment.address.location <- "./output/ac_catchment_addresses.rds"
 ac.catchment.polygon.location <- "./output/ac_catchment_polygons.sqlite"
+make.AC.catchments.boundary <- T
+ac.catchment.address.location.boundary <- "./output/ac_catchment_addresses_boundary.rds"
+ac.catchment.polygon.location.boundary <- "./output/ac_catchment_polygons_boundary.sqlite"
 
 # baseline address destination distances: set to F if using existing, or create in section 4
-find.baseline.distances <- T
+find.baseline.distances <- F
 baseline.node.distance.location <- "./output/node_distances_baseline_walk.csv"
-baseline.node.distance.location <- "./output/node_distances_baseline.csv"  #<<< TEMPORARY TO DELETE
 
 # baseline output summary
 baseline.output.location <- "./output/baseline assessment.xlsx"
@@ -245,6 +283,11 @@ if (find.residential.addresses) {
 
 # 3 AC catchments ----
 # -----------------------------------------------------------------------------#
+## 3.1 Standard approach ----
+## -----------------------------------------------------------------------------#
+# catchments are residential addresses within required walking distance of AC
+# 'anchors' - supermarket(s) if any, or else centroid
+
 # create AC catchments
 if (make.AC.catchments) {
   
@@ -292,6 +335,55 @@ if (make.AC.catchments) {
 }
 
 
+## 3.2 Alternative 'boundary' approach ----
+## -----------------------------------------------------------------------------#
+# catchments are residential addresses within required walking distance of the
+# boundary of the AC
+
+# create AC catchments
+if (make.AC.catchments.boundary) {
+  
+  # load inputs
+  residential.addresses <- st_read(residential.address.location)
+  
+  # omit 14 'undeveloped' ACs (can't select buffers for them)
+  ACs.filtered <- ACs %>%
+    filter(CENTRESIZE != "Undeveloped")
+  
+  # create temporary catchments folders to hold outputs from makeAcCatchments
+  temp.address.location <- "./catchment addresses boundary"
+  temp.polygon.location <- "./catchment polygons boundary"
+  dir.create(temp.address.location)
+  dir.create(temp.polygon.location)
+  
+  # run the function - saves files to the catchments folders
+  makeAcCatchmentsBoundary(ACs.filtered,
+                           network.nodes.walk,
+                           network.links.walk,
+                           residential.addresses,
+                           BUFFDIST.SMALL,
+                           BUFFDIST.MED.LARGE,
+                           DENSIFICATION.DIST, 
+                           temp.address.location,
+                           temp.polygon.location)
+  
+  # assemble outputs
+  catchment.outputs <- assembleCatchmentOutputs(temp.address.location,
+                                                temp.polygon.location)
+  
+  
+  # save the outputs
+  saveRDS(catchment.outputs[[1]], ac.catchment.address.location.boundary)
+  st_write(catchment.outputs[[2]], ac.catchment.polygon.location.boundary, 
+           delete_layer = TRUE)
+  
+  
+  # remove the catchments folders
+  unlink(temp.address.location, recursive = TRUE)
+  unlink(temp.polygon.location, recursive = TRUE)
+  
+}
+
 
 # 4 Distances between address nodes and existing destinations ----
 # -----------------------------------------------------------------------------#
@@ -328,7 +420,7 @@ if (find.baseline.distances) {
 
 # 5 Assess baseline status ----
 # -----------------------------------------------------------------------------#
-## 5.0 Set up output workbook ----
+## 5.0 Set up output workbook (required for all parts of section 5) ----
 ## ------------------------------------#
 # read in if it exists, or create if not
 if (file.exists(baseline.output.location)) {
@@ -340,7 +432,7 @@ if (file.exists(baseline.output.location)) {
 ## 5.1 Overall status ----
 ## ------------------------------------#
 
-# calculate overall area coverage as percentage of residences with access to 
+# calculate overall area coverage as percentage of population or dwellings with access to 
 # each destination type within specified distance for Greater Melbourne, 
 # all ACs, and large, medium and small ACs
 
@@ -373,17 +465,19 @@ baseline.coverage.dwel <- calculateCoverage(residential.addresses,
 
 
 # write output
-# worksheets with required names, if not already present
-if (!"baseline area coverage pop" %in% names(wb)) {
-  addWorksheet(wb, sheetName = "baseline area coverage pop")
+# add worksheets with required names if not already there
+pop.name <- "area coverage pop"
+dwel.name <- "area coverage dwel"
+if (!pop.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = pop.name)
 }
-if (!"baseline area coverage dwel" %in% names(wb)) {
-  addWorksheet(wb, sheetName = "baseline area coverage dwel")
+if (!dwel.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = dwel.name)
 }
 
 # write the results to the worksheets
-writeData(wb, sheet = "baseline area coverage pop", baseline.coverage.pop)
-writeData(wb, sheet = "baseline area coverage dwel", baseline.coverage.dwel)
+writeData(wb, sheet = pop.name, baseline.coverage.pop)
+writeData(wb, sheet = dwel.name, baseline.coverage.dwel)
 
 # write the workbook to  file (will create if new, or else overwrite)
 saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
@@ -392,7 +486,7 @@ saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
 ## 5.2 ACs ----
 ## ------------------------------------#
 
-# make table showing % of residences in each AC within specified walking
+# make table showing % of population or dwellings in each AC within specified walking
 # distance of destinations
 
 # load inputs
@@ -401,37 +495,243 @@ baseline.distances <- residential.addresses  %>%
   st_drop_geometry() %>%
   # join distances
   left_join(read.csv(baseline.node.distance.location), 
-            by = c("address.n.node" = "node_id")) %>%
+            by = c("walk_node" = "node_id")) %>%
   # remove any columns for second-most-distant, etc
   dplyr::select(-matches("[0-9]$"))
 ac.catchment.addresses <- readRDS(ac.catchment.address.location)
 
 # calculate coverage
-baseline.AC.coverage <- calculateAcCoverage(baseline.distances,
-                                              ac.catchments.addresses,
-                                              ACs)
+baseline.AC.coverage.pop <- calculateAcCoverage(baseline.distances,
+                                                ac.catchments.addresses,
+                                                ACs,
+                                                mode = "people")
+
+baseline.AC.coverage.dwel <- calculateAcCoverage(baseline.distances,
+                                                 ac.catchments.addresses,
+                                                 ACs,
+                                                 mode = "dwellings")
 
 # write output
-write.csv(baseline.AC.coverage, "./output/20mn baseline AC coverage.csv",
-          row.names = FALSE)
+# add worksheets with required names if not already there
+pop.name <- "AC coverage pop"
+dwel.name <- "AC coverage dwel"
+if (!pop.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = pop.name)
+}
+if (!dwel.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = dwel.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = pop.name, baseline.AC.coverage.pop)
+writeData(wb, sheet = dwel.name, baseline.AC.coverage.dwel)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
 
 
 ## 5.3 AC summary ----
 ## ------------------------------------#
 
-# summary table of ACs with 80% of residences with access to each destination
+# summary table of ACs with 80% of population or dwellings with access to each destination
 # type within specified walking distance
 
 # load AC.pct.coverage from section 5.2
-baseline.AC.coverage <- read.csv("./output/20mn baseline AC coverage.csv")
+baseline.AC.coverage.pop <- read.xlsx(baseline.output.location, sheet = "AC coverage pop")
+baseline.AC.coverage.dwel <- read.xlsx(baseline.output.location, sheet = "AC coverage dwel")
 
 # calculate summary
-baseline.AC.coverage.summary <- 
-  calculateAcCoverageSummary(baseline.AC.coverage)
+baseline.AC.coverage.summary.pop <- calculateAcCoverageSummary(baseline.AC.coverage.pop)
+baseline.AC.coverage.summary.dwel <- calculateAcCoverageSummary(baseline.AC.coverage.dwel)
 
 # write output
-write.csv(baseline.AC.coverage.summary, 
-          "./output/20mn baseline AC coverage summary.csv")
+# add worksheets with required names if not already there
+pop.name <- "AC coverage summ pop"
+dwel.name <- "AC coverage summ dwel"
+
+if (!pop.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = pop.name)
+}
+if (!dwel.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = dwel.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = pop.name, baseline.AC.coverage.summary.pop)
+writeData(wb, sheet = dwel.name, baseline.AC.coverage.summary.dwel)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
+
+
+## 5.4 ACs  for 'boundary' approach ----
+## ------------------------------------#
+# # summary table of ACs with 80% of population or dwellings with access to each destination
+# type within specified walking distance, for 'boundary' approach - based on 5.2
+
+# load inputs
+residential.addresses <- st_read(residential.address.location)
+baseline.distances <- residential.addresses  %>%
+  st_drop_geometry() %>%
+  # join distances
+  left_join(read.csv(baseline.node.distance.location), 
+            by = c("walk_node" = "node_id")) %>%
+  # remove any columns for second-most-distant, etc
+  dplyr::select(-matches("[0-9]$"))
+ac.catchment.addresses <- readRDS(ac.catchment.address.location.boundary)
+
+# calculate coverage (note - mode is 'people' not 'dwellings')
+baseline.AC.coverage.boundary <- calculateAcCoverage(baseline.distances,
+                                                     ac.catchments.addresses,
+                                                     ACs,
+                                                     mode = "people")
+# write output
+# add worksheets with required names if not already there
+boundary.name <- "AC coverage boundary"
+if (!boundary.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = boundary.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = boundary.name, baseline.AC.coverage.boundary)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
+
+
+## 5.5 AC summary for 'boundary' approach ----
+## ------------------------------------#
+
+# summary table of ACs with 80% of population with access to each destination
+# type within specified walking distance
+
+# load AC.pct.coverage from section 5.4
+baseline.AC.coverage.boundary <- read.xlsx(baseline.output.location, sheet = "AC coverage boundary")
+
+# calculate summary
+baseline.AC.coverage.summary.boundary <- calculateAcCoverageSummary(baseline.AC.coverage.boundary)
+
+# write output
+# add worksheet with required name if not already there
+boundary.name <- "AC coverage summ boundary"
+
+if (!boundary.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = boundary.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = boundary.name, baseline.AC.coverage.summary.boundary)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
+
+
+## 5.6 Comparison of pop, dwel and boundary ----
+## ------------------------------------#
+# comparison of number of ACs requiring new destinations for each approach
+# read in the pop, dwel and boundary summaries
+summary.pop <- read.xlsx(baseline.output.location, sheet = "AC coverage summ pop")
+summary.dwel <- read.xlsx(baseline.output.location, sheet = "AC coverage summ dwel")
+summary.boundary <- read.xlsx(baseline.output.location, sheet = "AC coverage summ boundary")
+
+# total number of ACs (for last row of comparison table)
+no.of.ACs <-data.frame(dest.dist = "Number of ACs",
+               pop = summary.pop[summary.pop$dest.dist == "Number of ACs", "all.no"],
+               dwel = summary.dwel[summary.dwel$dest.dist == "Number of ACs", "all.no"],
+               boundary = summary.boundary[summary.boundary$dest.dist == "Number of ACs", "all.no"])
+
+# comparison table
+shortfall.comparison <- summary.pop %>%
+  dplyr::select(dest.dist, pop = all.shortfall) %>%
+  left_join(summary.dwel %>%
+              dplyr::select(dest.dist, dwel = all.shortfall),
+            by = "dest.dist") %>%
+  left_join(summary.boundary %>%
+              dplyr::select(dest.dist, boundary = all.shortfall),
+            by = "dest.dist") %>%
+  # remove and replace last 'Number of ACs' row
+  filter(dest.dist != "Number of ACs") %>%
+  bind_rows(., no.of.ACs)
+
+# write output
+# add worksheet with required name if not already there
+comparison.name <- "AC shortfall comp"
+
+if (!comparison.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = comparison.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = comparison.name, shortfall.comparison)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
+
+
+## 5.7 LGA group analysis of pop and boundary   ----
+## ------------------------------------#
+# breakdown of numbers of ACs not meeting target for pop and boundary approaches
+# by inner/middle/outer categorisation
+
+# load and classify LGAs (inner, middle, outer)
+LGAs <- read_zipped_GIS(zipfile = LGA.zipfile, subpath = LGA.subpath)
+LGAs.classified <- classifyLGAs(LGAs)
+
+# classify ACs as inner/middle/outer based on centroid
+ACs.classified <- ACs %>%
+  dplyr::select(CENTRE_NO) %>%
+  st_centroid() %>%
+  st_join(LGAs.classified %>% dplyr::select(NAME, group),
+          join = st_intersects) %>%
+  st_drop_geometry()
+
+# load coverage results and join classification
+baseline.AC.coverage.pop <- 
+  read.xlsx(baseline.output.location, sheet = "AC coverage pop") %>%
+  left_join(ACs.classified, by = c("centre_no" = "CENTRE_NO"))
+baseline.AC.coverage.boundary <- 
+  read.xlsx(baseline.output.location, sheet = "AC coverage boundary") %>%
+  left_join(ACs.classified, by = c("centre_no" = "CENTRE_NO"))
+
+# calculate the shortfalls by group
+pop.shortfall <- calculateLgaGroupShortfalls(baseline.AC.coverage.pop)
+boundary.shortfall <- calculateLgaGroupShortfalls(baseline.AC.coverage.boundary)
+
+# make LGA group shortfall comparison table (note 'pop' becomes 'anc[hor]' and
+# 'boundary' becomes 'b[oun]dry')
+group.shortfall.comparison <- pop.shortfall %>%
+  filter(dest.dist != "Number of ACs") %>%
+  dplyr::select(dest.dist, inner.anc = inner.pct, 
+                middle.anc = middle.pct, outer.anc = outer.pct) %>%
+  left_join(boundary.shortfall %>% 
+              filter(dest.dist != "Number of ACs") %>%
+              dplyr::select(dest.dist, inner.bdry = inner.pct, 
+                            middle.bdry = middle.pct, outer.bdry = outer.pct),
+            by = "dest.dist") %>%
+  # differences between the shortfall percentages
+  mutate(inner.diff = inner.bdry - inner.anc,
+         middle.diff = middle.bdry - middle.anc,
+         outer.diff = outer.bdry - outer.anc) %>%
+  # rearrange in required order
+  dplyr::select(dest.dist,
+                inner.anc, inner.bdry, inner.diff,
+                middle.anc, middle.bdry, middle.diff,
+                outer.anc, outer.bdry, outer.diff)
+
+
+# write output
+# add worksheet with required name if not already there
+group.comparison.name <- "AC shortfall comp grp"
+
+if (!group.comparison.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = group.comparison.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = group.comparison.name, group.shortfall.comparison)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, baseline.output.location, overwrite = TRUE)
 
 
 # 6 Small AC investigation ----
@@ -440,7 +740,8 @@ write.csv(baseline.AC.coverage.summary,
 ## 6.1 Load required data ----
 ## -------------------------------------#
 # baseline performance against destination tests, by AC
-baseline.AC.coverage <- read.csv("./output/20mn baseline AC coverage.csv")
+baseline.AC.coverage.pop <- read.xlsx(baseline.output.location, sheet = "AC coverage pop")
+baseline.AC.coverage.dwel <- read.xlsx(baseline.output.location, sheet = "AC coverage dwel")
 
 # AC catchments
 ac.catchments <- readRDS(ac.catchment.address.location)
@@ -448,137 +749,193 @@ ac.catchments <- readRDS(ac.catchment.address.location)
 
 ## 6.2 Allocate score ----
 ## -------------------------------------#
-baseline.score <- baseline.AC.coverage %>%
+baseline.score <- function(baseline.AC.coverage) {
+  output <- baseline.AC.coverage %>%
+    # add score, out of 14 (one for each test)
+    mutate(score = as.integer(supermarket.800 >= 80) +
+             as.integer(pharmacy.800 >= 80) +
+             as.integer(pharmacy.800 >= 80) +
+             as.integer(post.800 >= 80) +
+             as.integer(gp.800 >= 80) +
+             as.integer(mat.child.health.800 >= 80) +
+             as.integer(dentist.800 >= 80) +
+             as.integer(childcare.800 >= 80) +
+             as.integer(kindergarten.800 >= 80) +
+             as.integer(primary.800 >= 80) +
+             as.integer(comm.library.800 >= 80) +
+             as.integer(convenience.400 >= 80) +
+             as.integer(rest.cafe.400 >= 80) +
+             as.integer(park.400 >= 80) +
+             as.integer(bus.400.tram.600.train.800 >= 80)
+    ) %>%
+    
+    # divide small category into two
+    left_join(ACs %>% dplyr::select(centre_no = CENTRE_NO, CENTRESIZE), by = "centre_no") %>%
+    mutate(category = as.factor(case_when(
+      size == "small" & CENTRESIZE == "2000 to 5000"   ~ "small 2-5k",
+      size == "small" & CENTRESIZE == "Less than 2000" ~ "small <2k",
+      TRUE ~ size
+    ))) %>%
+    # reorder the levels of the 'score' factor
+    mutate(category = factor(category, 
+                             levels = c("small <2k", "small 2-5k", "medium", "large")))
+} 
   
-  # add score, out of 14 (one for each test)
-  mutate(score = as.integer(supermarket.800 >= 80) +
-           as.integer(pharmacy.800 >= 80) +
-           as.integer(pharmacy.800 >= 80) +
-           as.integer(post.800 >= 80) +
-           as.integer(gp.800 >= 80) +
-           as.integer(mat.child.health.800 >= 80) +
-           as.integer(dentist.800 >= 80) +
-           as.integer(childcare.800 >= 80) +
-           as.integer(kindergarten.800 >= 80) +
-           as.integer(primary.800 >= 80) +
-           as.integer(comm.library.800 >= 80) +
-           as.integer(convenience.400 >= 80) +
-           as.integer(rest.cafe.400 >= 80) +
-           as.integer(park.400 >= 80) +
-           as.integer(bus.400.tram.600.train.800 >= 80)
-  ) %>%
-  
-  # divide small category into two
-  left_join(ACs %>% dplyr::select(centre_no = CENTRE_NO, CENTRESIZE), by = "centre_no") %>%
-  mutate(category = as.factor(case_when(
-    size == "small" & CENTRESIZE == "2000 to 5000"   ~ "small 2-5k",
-    size == "small" & CENTRESIZE == "Less than 2000" ~ "small <2k",
-    TRUE ~ size
-  ))) %>%
-  # reorder the levels of the 'score' factor
-  mutate(category = factor(category, 
-                           levels = c("small <2k", "small 2-5k", "medium", "large")))
+baseline.score.pop <- baseline.score(baseline.AC.coverage.pop)
+baseline.score.dwel <- baseline.score(baseline.AC.coverage.dwel)
 
 ## 6.3 Boxplot for score ----
 ## -------------------------------------#
-# calculate counts for each category
-category.counts <- baseline.score %>%
-  count(category)
+scorePlot <- function(baseline.score) {
+  # calculate counts for each category
+  category.counts <- baseline.score %>%
+    count(category)
+  
+  # create the boxplot and add counts
+  score.plot <- ggplot(data = baseline.score, aes(x = category, y = score)) +
+    # geom_jitter(position = position_jitter(width = 0.1), alpha = 0.2, colour = "blue") + 
+    geom_boxplot() +
+    labs( #title = "Distribution of scores by Activity Centre size",
+         x = "Activity Centre size (with number of centres)",
+         y = "Score: no of destination targets met (max 14)") +
+    scale_x_discrete(labels = paste0(category.counts$category, " (", category.counts$n, ")")) +
+    theme_classic()
+  
+  return(score.plot)
+}
 
-# create the boxplot and add counts
-score.plot <- ggplot(data = baseline.score, aes(x = category, y = score)) +
-  # geom_jitter(position = position_jitter(width = 0.1), alpha = 0.2, colour = "blue") + 
-  geom_boxplot() +
-  labs(title = "Distribution of scores by Activity Centre size",
-       x = "Activity Centre size (with number of centres)",
-       y = "Score: no of destination targets met (max 14)") +
-  scale_x_discrete(labels = paste0(category.counts$category, " (", category.counts$n, ")")) +
-  theme_classic()
+score.plot.pop <- scorePlot(baseline.score.pop)
+score.plot.dwel <- scorePlot(baseline.score.dwel)
 
 # save
-ggsave("./images/baseline_score.png", score.plot, width = 15, height = 12, units = "cm")
+ggsave("./images/baseline_score_pop.png", score.plot.pop, width = 15, height = 12, units = "cm", dpi = 1000)
+ggsave("./images/baseline_score_dwel.png", score.plot.dwel, width = 15, height = 12, units = "cm")
 
 # means
-means <- baseline.score %>%
+means.pop <- baseline.score.pop %>%
   group_by(category) %>%
   summarise(mean = mean(score))
-means
+means.pop 
 # category    mean
 # <fct>      <dbl>
-# 1 small <2k   4.64
-# 2 small 2-5k  6.35
-# 3 medium      5.70
-# 4 large       6.41
+# 1 small <2k   4.59
+# 2 small 2-5k  6.27
+# 3 medium      5.60
+# 4 large       6.26
+
+means.dwel <- baseline.score.dwel %>%
+  group_by(category) %>%
+  summarise(mean = mean(score))
+means.dwel
+# category    mean
+# <fct>      <dbl>
+# 1 small <2k   4.61
+# 2 small 2-5k  6.30
+# 3 medium      5.65
+# 4 large       6.34
 
 
 ## 6.4 Allocate overlap ----
 ## -------------------------------------#
-# join ac.catchments to details from baseline scores
-catchments <- ac.catchments %>%
-  rename(centre_no = CENTRE_NO) %>%
-  left_join(baseline.score %>% 
-              st_drop_geometry() %>%
-              dplyr::select(centre_no, size, category, score), 
-            by = "centre_no")
-
-# address id's for medium and large ACs
-medium.large <- c()
-for (i in 1:nrow(catchments)) {
-  if (catchments$size[i] %in% c("medium", "large")) {
-    medium.large <- c(medium.large, unlist(catchments$address_ids[i]))
+allocateOverlap <- function(ac.catchments, baseline.score) {
+  # join ac.catchments to details from baseline scores
+  catchments <- ac.catchments %>%
+    rename(centre_no = CENTRE_NO) %>%
+    left_join(baseline.score %>% 
+                st_drop_geometry() %>%
+                dplyr::select(centre_no, size, category, score), 
+              by = "centre_no")
+  
+  # address id's for medium and large ACs
+  medium.large <- c()
+  for (i in 1:nrow(catchments)) {
+    if (catchments$size[i] %in% c("medium", "large")) {
+      medium.large <- c(medium.large, unlist(catchments$address_ids[i]))
+    }
   }
+  medium.large <- medium.large %>% unique() %>% sort()
+  
+  # overlap percentage for small, based on number of address id's that are also in medium.large
+  small.acs <- catchments %>%
+    filter(size == "small")
+  
+  for (i in 1:nrow(small.acs)) {
+    ac.addresses <- unlist(small.acs$address_ids[i])
+    overlap.addresses <- ac.addresses[(ac.addresses %in% medium.large)]
+    small.acs$overlap.pct[i] <- length(overlap.addresses) / length(ac.addresses) * 100
+  }
+  
+  # add overlap categories and groups
+  small.acs.with.groups <- small.acs %>%
+    mutate(overlap.category = case_when(overlap.pct >= 50 ~ "large",
+                                        TRUE    ~ "small"),
+           group = paste0(category, ", ", overlap.category, " overlap"))
+  
+  
+  return(small.acs.with.groups)
 }
-medium.large <- medium.large %>% unique() %>% sort()
 
-# overlap percentage for small, based on number of address id's that are also in medium.large
-small.acs <- catchments %>%
-  filter(size == "small")
-
-for (i in 1:nrow(small.acs)) {
-  ac.addresses <- unlist(small.acs$address_ids[i])
-  overlap.addresses <- ac.addresses[(ac.addresses %in% medium.large)]
-  small.acs$overlap.pct[i] <- length(overlap.addresses) / length(ac.addresses) * 100
-}
-
-# add overlap categories and groups
-small.acs.with.groups <- small.acs %>%
-  mutate(overlap.category = case_when(overlap.pct >= 50 ~ "large",
-                                      TRUE    ~ "small"),
-         group = paste0(category, ", ", overlap.category, " overlap"))
-
+small.acs.with.groups.pop <- allocateOverlap(ac.catchments, baseline.score.pop)
+small.acs.with.groups.dwel <- allocateOverlap(ac.catchments, baseline.score.dwel)
 
 ## 6.5 Boxplot for overlap score ----
 ## -------------------------------------#
-# calculate counts for each category
-group.counts <- small.acs.with.groups %>%
-  count(group)
+overlapPlot <- function(small.acs.with.groups) {
+  # calculate counts for each category
+  group.counts <- small.acs.with.groups %>%
+    count(group) %>%
+    # order so as to match the order in which the plot will be sorted
+    mutate(order = case_when(
+      group == "small <2k, large overlap" ~ 1,
+      group == "small <2k, small overlap" ~ 2,
+      group == "small 2-5k, large overlap" ~ 3,
+      group == "small 2-5k, small overlap" ~ 4
+    )) %>%
+    arrange(order)
+  
+  # create the boxplot and add counts
+  overlap.score.plot <- ggplot(data = small.acs.with.groups, aes(x = group, y = score)) +
+    # geom_jitter(position = position_jitter(width = 0.1), alpha = 0.2, colour = "blue") + 
+    geom_boxplot() +
+    labs(#title = "Distribution of scores by small Activity Centre overlap group",
+         x = "Activity Centre overlap category (with number of centres)",
+         y = "Score: no of destination targets met (max 14)",
+         caption = "'Large overlap' means 50% or more of the dwellings in the small AC are also in a\n large or medium AC; small overlap means less than 50%.") +
+    scale_x_discrete(labels = function(x) str_wrap(paste0(x, " (", group.counts$n, ")"), width = 15)) +
+    # scale_x_discrete(labels = paste0(group.counts$group, " (", group.counts$n, ")")) +
+    theme_classic() +
+    theme(plot.caption = element_text(hjust = 0))  #  left alignment
+  
+  return(overlap.score.plot)
+}
 
-# create the boxplot and add counts
-overlap.score.plot <- ggplot(data = small.acs.with.groups, aes(x = group, y = score)) +
-  # geom_jitter(position = position_jitter(width = 0.1), alpha = 0.2, colour = "blue") + 
-  geom_boxplot() +
-  labs(title = "Distribution of scores by small Activity Centre overlap group",
-       x = "Activity Centre overlap category (with number of centres)",
-       y = "Score: no of destination targets met (max 14)",
-       caption = "'Large overlap' means 50% or more of the dwellings in the small AC are also in a\n large or medium AC; small overlap means less than 50%.") +
-  scale_x_discrete(labels = function(x) str_wrap(paste0(x, " (", group.counts$n, ")"), width = 15)) +
-  # scale_x_discrete(labels = paste0(group.counts$group, " (", group.counts$n, ")")) +
-  theme_classic() +
-  theme(plot.caption = element_text(hjust = 0))  #  left alignment
-
+overlap.plot.pop <- overlapPlot(small.acs.with.groups.pop)
+overlap.plot.dwel <- overlapPlot(small.acs.with.groups.dwel)
 
 # save
-ggsave("./images/overlap_score.png", overlap.score.plot, width = 15, height = 12, units = "cm")
+ggsave("./images/overlap_score_pop.png", overlap.plot.pop, width = 15, height = 12, units = "cm")
+ggsave("./images/overlap_score_dwel.png", overlap.plot.dwel, width = 15, height = 12, units = "cm")
 
 
 # means
-means.overlap <- small.acs.with.groups %>%
+means.overlap.pop <- small.acs.with.groups.pop %>%
   group_by(group) %>%
   summarise(mean = mean(score))
-means.overlap
+means.overlap.pop  
 # group                      mean
 # <chr>                     <dbl>
-# 1 small <2k, large overlap   6.52
-# 2 small <2k, small overlap   4.33
-# 3 small 2-5k, large overlap  7.11
-# 4 small 2-5k, small overlap  6.21
+# 1 small 2-5k, large overlap  6.81
+# 2 small 2-5k, small overlap  6.18
+# 3 small <2k, large overlap   6.47
+# 4 small <2k, small overlap   4.30
+
+means.overlap.dwel <- small.acs.with.groups.dwel %>%
+  group_by(group) %>%
+  summarise(mean = mean(score))
+means.overlap.dwel  
+# group                      mean
+# <chr>                     <dbl>
+# 1 small 2-5k, large overlap  6.86
+# 2 small 2-5k, small overlap  6.2 
+# 3 small <2k, large overlap   6.5 
+# 4 small <2k, small overlap   4.33

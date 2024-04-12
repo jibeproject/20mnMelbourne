@@ -31,22 +31,25 @@ dir_walk(path = "./functions/", source, recurse = T, type = "file")
 ## ------------------------------------#
 PROJECT.CRS <- 28355
 
+# node distances for accessibility analysis (section 2.1): set to F if using existing, 
+# or create in section 2.1
+find.accessibility.node.distances <- F
+
+# people within destination catchements for underutilisation analysis (section 3.1):
+# set to F if using existing, or create in section 3.1
+find.people.served <- F
+
 
 ## 1.4 Data ----
 ## ------------------------------------#
 # region buffer
 region_buffer <- st_read("../data/processed/region_buffer.sqlite")
 
-# network, and filter to region buffer
-links <- st_read("../data/processed/edgesMelbourne.gpkg") %>%
-  st_filter(region_buffer, .predicate = st_intersects) %>%
-  # tidy names to those expected by functions
-  rename(from_id = from, to_id = to, id = edgeID, GEOMETRY = geom)
+# load network, and filter to region buffer
+links <- st_read("../data/processed/melbourneClipped_edges.sqlite") %>%
+  st_filter(region_buffer, .predicate = st_intersects)
 
-nodes <- st_read("../data/processed/nodesMelbourne.gpkg") %>%
-  # tidy names to those expected by functions
-  rename(id = nodeID, GEOMETRY = geom) %>%
-  mutate(x = st_coordinates(GEOMETRY)[,1], y = st_coordinates(GEOMETRY)[,2])
+nodes <- st_read("../data/processed/melbourneClipped_nodes.sqlite")
 
 links.walk <- links %>% filter(is_walk == TRUE)
 nodes.walk <- nodes %>% filter(id %in% links.walk$from_id | id %in% links.walk$to_id)
@@ -63,11 +66,15 @@ network.cycle <- largestConnectedComponent(nodes.cycle, links.cycle)
 network.nodes.cycle <- network.cycle[[1]]
 network.links.cycle <- network.cycle[[2]]
 
+# remove intermediate components (memory issues)
+rm(links, nodes, links.walk, nodes.walk, links.cycle, nodes.cycle,
+   network.walk, network.cycle)
+
 # residential addresses (created in section 2 of baseline.R)
 residential.addresses <- st_read("./output/residential_addresses.sqlite")
 
 # baseline locations
-POIs.location <- "../data/processed/Weighted POIs/poi.gpkg"
+POIs.location <- "../data/processed/Destinations weights/Baseline/poi_weight.gpkg"
 ANLS.pos.location <- 
   "../data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg"
 ANLS.dest.location <- 
@@ -97,17 +104,29 @@ LGAs <- read_zipped_GIS(zipfile = "../data/original/LGAs.zip",
 SA2s <- read_zipped_GIS(zipfile = "../data/original/1270055001_sa2_2016_aust_shape.zip") %>%
   st_transform(PROJECT.CRS)
 
-# node distances for accessibility analysis (section 2.1): set to F if using existing, 
-# or create in section 2.1
-find.accessibility.node.distances <- F
+# AC catchments
+ac.catchment.address.location <- "./output/ac_catchment_addresses.rds"
+ac.catchment.polygon.location <- "./output/ac_catchment_polygons.sqlite"
 
-# distances from destinations to dwellings for underutilisation analysis (section 3.1):
-# set to F if using existing, or create in section 3.1
-find.destination.dwelling.distances <- F
+# people within catchments of destinations
+people.served.location <- "./output/people served.sqlite"
+
+# output table locations
+accessibility.tables.location <- "./output/accessibility tables.xlsx"
+underutilisation.tables.location <- "./output/underutilisation tables.xlsx"
 
 
 # 2 Accessibility analysis ----
 # -----------------------------------------------------------------------------#
+
+## 2.0 Set up output workbook (required for sections 2.3 to 2.5) ----
+## ------------------------------------#
+# read in if it exists, or create if not
+if (file.exists(accessibility.tables.location)) {
+  wb <-loadWorkbook(accessibility.tables.location)
+} else {
+  wb <- createWorkbook()
+}
 
 ## 2.1 Destination address node distances ----
 ## ------------------------------------#
@@ -127,7 +146,7 @@ if (find.accessibility.node.distances) {
   # 'walk' is the same as in baseline.R (but verify that 'multiple.destinations'
   # is the same as is required here)
   
-  baseline.node.distances.walk <- read.csv("./output/node_distances_baseline.csv")
+  baseline.node.distances.walk <- read.csv("./output/node_distances_baseline_walk.csv")
   
   # # alternatively, if the baseline needs to be recreated
   # baseline.node.distances.walk <-
@@ -184,6 +203,9 @@ if (find.accessibility.node.distances) {
     
   }
   
+  # optionally, for memory (if needed again, recreate in section 1.4) - 
+  rm(baseline.destinations, intervention.destinations)
+  
   # walk
   intervention.node.distances.walk <- 
     addressDestinationDistances(all.destinations,
@@ -215,16 +237,17 @@ if (find.accessibility.node.distances) {
 ## 2.2 Read in node distances and calculate scores ----
 ## ------------------------------------#
 # walk
-baseline.walk <- read.csv("./output/node_distances_baseline.csv")  # see notes in 2.1 on this file
+baseline.walk <- read.csv("./output/node_distances_baseline_walk.csv")  # see notes in 2.1 on this file
 intervention.walk <- read.csv("./output/node_distances_intervention_walk.csv")
 
 baseline.walk.scores <- calculateAccessibilityScores(baseline.walk, mode = "walk")
 intervention.walk.scores <- calculateAccessibilityScores(intervention.walk, mode = "walk")
 
+# write output (can be used for display)
 write.csv(baseline.walk.scores %>%
-            left_join(intervention.walk.scores, 
+            left_join(intervention.walk.scores,
                       by = "node_id",
-                      suffix = c("_base", "int")),
+                      suffix = c("_base", "_int")),
           "./output/dwel accessibility scores walk.csv", row.names = FALSE)
 
 #cycle
@@ -234,110 +257,233 @@ intervention.cycle <- read.csv("./output/node_distances_intervention_cycle.csv")
 baseline.cycle.scores <- calculateAccessibilityScores(baseline.cycle, mode = "cycle")
 intervention.cycle.scores <- calculateAccessibilityScores(intervention.cycle, mode = "cycle")
 
+# write output (can be used for display)
 write.csv(baseline.cycle.scores %>%
-            left_join(intervention.cycle.scores, 
+            left_join(intervention.cycle.scores,
                       by = "node_id",
-                      suffix = c("_base", "int")),
+                      suffix = c("_base", "_int")),
           "./output/dwel accessibility scores cycle.csv", row.names = FALSE)
 
 
 ## 2.3 Aggregate scores for LGAs ----
 ## ------------------------------------#
+
+# note that only 'people' mode is used, not 'dwellings'
+
 addresses.with.LGA <- residential.addresses %>%
-  st_join(., LGAs %>% dplyr::select(NAME), .predicate = st_intersects) %>%
+  st_join(., classifyLGAs(LGAs) %>% dplyr::select(NAME, group), .predicate = st_intersects) %>%
   mutate(LGA = case_when(NAME == "MERRI-BEK" ~ "Merri-bek",
                          TRUE ~ str_to_title(NAME))) %>%
   st_drop_geometry()
 
 # walk
 address.scores.walk <- addresses.with.LGA %>%
-  # join the scores
-  left_join(baseline.walk.scores, 
-            by = c("address.n.node" = "node_id")) %>%
-  left_join(intervention.walk.scores, 
-            by = c("address.n.node" = "node_id"),
-            suffix = c("_base", "_int"))
+  left_join(read.csv("./output/dwel accessibility scores walk.csv"),
+            by = c("walk_node" = "node_id"))
 
-LGA.scores.walk <- calculateLgaAccessibilityScores(address.scores.walk)
+LGA.scores.walk <- calculateLgaAccessibilityScores(address.scores.walk,
+                                                   mode = "people")
 
-# save output
-write.csv(LGA.scores.walk, "./output/LGA accessibility scores walk.csv", row.names = F)
+# write output
+# add worksheet with required name if not already there
+LGA.scores.walk.name <- "LGA accessibility scores walk"
+
+if (!LGA.scores.walk.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = LGA.scores.walk.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = LGA.scores.walk.name, LGA.scores.walk)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, accessibility.tables.location, overwrite = TRUE)
+
 
 # cycle
 address.scores.cycle <- addresses.with.LGA %>%
-  # join the scores
-  left_join(baseline.cycle.scores, 
-            by = c("cycle.node" = "node_id")) %>%
-  left_join(intervention.cycle.scores, 
-            by = c("cycle.node" = "node_id"),
-            suffix = c("_base", "_int"))
+  left_join(read.csv("./output/dwel accessibility scores cycle.csv"),
+            by = c("cycle_node" = "node_id"))
 
-LGA.scores.cycle <- calculateLgaAccessibilityScores(address.scores.cycle)
+LGA.scores.cycle <- calculateLgaAccessibilityScores(address.scores.cycle,
+                                                    mode = "people")
 
-# save output
-write.csv(LGA.scores.cycle, "./output/LGA accessibility scores cycle.csv", row.names = F)
+# write output
+# add worksheet with required name if not already there
+LGA.scores.cycle.name <- "LGA accessibility scores cycle"
+
+if (!LGA.scores.cycle.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = LGA.scores.cycle.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = LGA.scores.cycle.name, LGA.scores.cycle)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, accessibility.tables.location, overwrite = TRUE)
 
 
-## 2.4 Aggregate scores for SA2s ----
+## 2.4 Combined walk/cycle table for main single hard score approach ----
 ## ------------------------------------#
+
+# load single hard walk and cycle scores
+walk.scores <- read.xlsx(accessibility.tables.location,
+                         sheet = "LGA accessibility scores walk") %>%
+  dplyr::select(group, LGA, 
+                score_single_hard_base, score_single_hard_int,
+                score_single_hard_diff, score_single_hard_rank)
+cycle.scores <- read.xlsx(accessibility.tables.location,
+                         sheet = "LGA accessibility scores cycle") %>%
+  dplyr::select(group, LGA, 
+                score_single_hard_base, score_single_hard_int,
+                score_single_hard_diff, score_single_hard_rank)
+
+score.summary <- walk.scores %>%
+  left_join(cycle.scores, by = c("group", "LGA"),
+            suffix = c("_base", "_int")) %>%
+  arrange(group, score_single_hard_rank_base)
+
+# write output
+# add worksheet with required name if not already there
+LGA.scores.summary.name <- "LGA accessibility scores summ"
+
+if (!LGA.scores.summary.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = LGA.scores.summary.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = LGA.scores.summary.name, score.summary)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, accessibility.tables.location, overwrite = TRUE)
+
+
+## 2.5 Aggregate scores for SA2s ----
+## ------------------------------------#
+
+# requires baseline and intervention scores created in section 2.2
+# note that only 'people' mode is used, not 'dwellings'
+
 addresses.with.SA2 <- residential.addresses %>%
   st_join(., SA2s %>% dplyr::select(SA2_MAIN16), .predicate = st_intersects) %>%
   st_drop_geometry()
 
 # walk
 address.scores.walk <- addresses.with.SA2 %>%
-  # join the scores
-  left_join(baseline.walk.scores, 
-            by = c("address.n.node" = "node_id")) %>%
-  left_join(intervention.walk.scores, 
-            by = c("address.n.node" = "node_id"),
-            suffix = c("_base", "_int"))
+  left_join(read.csv("./output/dwel accessibility scores walk.csv"),
+            by = c("walk_node" = "node_id"))
 
-SA2.scores.walk <- calculateSA2AccessibilityScores(address.scores.walk)
+SA2.scores.walk <- calculateSA2AccessibilityScores(address.scores.walk,
+                                                   mode = "people")
 
-# save output
-write.csv(SA2.scores.walk, "./output/SA2 accessibility scores walk.csv", row.names = F)
+# write output
+# add worksheet with required name if not already there
+SA2.scores.walk.name <- "SA2 accessibility scores walk"
+
+if (!SA2.scores.walk.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = SA2.scores.walk.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = SA2.scores.walk.name, SA2.scores.walk)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, accessibility.tables.location, overwrite = TRUE)
+
 
 # cycle
 address.scores.cycle <- addresses.with.SA2 %>%
-  # join the scores
-  left_join(baseline.cycle.scores, 
-            by = c("cycle.node" = "node_id")) %>%
-  left_join(intervention.cycle.scores, 
-            by = c("cycle.node" = "node_id"),
-            suffix = c("_base", "_int"))
+  left_join(read.csv("./output/dwel accessibility scores cycle.csv"),
+            by = c("cycle_node" = "node_id"))
 
-SA2.scores.cycle <- calculateSA2AccessibilityScores(address.scores.cycle)
+SA2.scores.cycle <- calculateSA2AccessibilityScores(address.scores.cycle,
+                                                    mode = "people")
 
-# save output
-write.csv(SA2.scores.cycle, "./output/SA2 accessibility scores cycle.csv", row.names = F)
+# write output
+# add worksheet with required name if not already there
+SA2.scores.cycle.name <- "SA2 accessibility scores cycle"
 
+if (!SA2.scores.cycle.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = SA2.scores.cycle.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = SA2.scores.cycle.name, SA2.scores.cycle)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, accessibility.tables.location, overwrite = TRUE)
 
 
 #  3 Underutilisation analysis ----
 # -----------------------------------------------------------------------------#
-## 3.1 Dwellings served by new destinations ----
-## ------------------------------------#
-# find the number of dwellings in the 800m/400m catchment of each of the
-# new destination locations
 
-if (find.destination.dwelling.distances) {
-  intervention.destinations.with.dwellings <-    
-    destinationDwellings(intervention.destinations,
-                         residential.addresses,
-                         network.nodes.walk,
-                         network.links.walk, 
-                         PROJECT.CRS)
-  
-  st_write(intervention.destinations.with.dwellings,
-           "./output/intervention_destinations_with_dwellings.sqlite")
+## 3.0 Set up output workbook (required for sections 3.4 and 3.5) ----
+## ------------------------------------#
+# read in if it exists, or create if not
+if (file.exists(underutilisation.tables.location)) {
+  wb <-loadWorkbook(underutilisation.tables.location)
 } else {
-  intervention.destinations.with.dwellings <- 
-    st_read("./output/intervention_destinations_with_dwellings.sqlite")
+  wb <- createWorkbook()
 }
 
 
-## 3.2 Population and dwelling requiements ----
+## 3.1 People served by destinations ----
+## ------------------------------------#
+# note - requires intervention destinations and baseline destination; if 
+# these have been removed in section 2.1.3, re-create them using section 1.4
+
+# find the number of people in the walking/cycling catchments of each of the
+# new/existing destination locations
+
+if (find.people.served) {
+  people.served.new.walk <- peopleServed(intervention.destinations,
+                                         residential.addresses,
+                                         network.nodes.walk,
+                                         network.links.walk, 
+                                         PROJECT.CRS,
+                                         transport = "walk",
+                                         mode = "people")
+  st_write(people.served.new.walk, people.served.location, 
+           layer = "new_walk", delete_layer = TRUE)
+  
+  people.served.new.cycle <- peopleServed(intervention.destinations,
+                                          residential.addresses,
+                                          network.nodes.cycle,
+                                          network.links.cycle, 
+                                          PROJECT.CRS,
+                                          transport = "cycle",
+                                          mode = "people")
+  st_write(people.served.new.cycle, people.served.location, 
+           layer = "new_cycle", delete_layer = TRUE)
+  
+  people.served.existing.walk <- peopleServed(baseline.destinations,
+                                              residential.addresses,
+                                              network.nodes.walk,
+                                              network.links.walk, 
+                                              PROJECT.CRS,
+                                              transport = "walk",
+                                              mode = "people")
+  st_write(people.served.existing.walk, people.served.location, 
+           layer = "existing_walk", delete_layer = TRUE)
+  
+  people.served.existing.cycle <- peopleServed(baseline.destinations,
+                                               residential.addresses,
+                                               network.nodes.cycle,
+                                               network.links.cycle, 
+                                               PROJECT.CRS,
+                                               transport = "cycle",
+                                               mode = "people")
+  st_write(people.served.existing.cycle, people.served.location, 
+           layer = "existing_cycle", delete_layer = TRUE)
+  
+} else {
+  people.served.new.walk <- st_read(people.served.location, layer = "new_walk")
+  people.served.new.cycle <- st_read(people.served.location, layer = "new_cycle")
+  people.served.existing.walk <- st_read(people.served.location, layer = "existing_walk")
+  people.served.existing.cycle <- st_read(people.served.location, layer = "existing_cycle")
+}
+
+
+## 3.2 Population requirements ----
 ## ------------------------------------#
 # table of population requirements
 pop.reqts <- tribble(
@@ -358,81 +504,236 @@ pop.reqts <- tribble(
   "bus"                  ,  1000
 )
 
-# convert to dwelling requirements
-# average number of people per household for Greater Melbourne GCCSA in 2021 census:
-# https://www.abs.gov.au/census/find-census-data/quickstats/2021/2GMEL
-dwel.reqts <- pop.reqts %>%
-  mutate(dwel_reqt = round(pop_reqt / 2.6))
 
-
-## 3.3 Utilisation for new destinations ----
+## 3.3 Utilisation for destinations ----
 ## ------------------------------------#
+# function to add dest_type to existing destinations, and exclude those
+# that aren't in baseline
+addDestType <- function(people.served) {
+  output <- people.served %>%
+    # dest_type column, based on existing destination attributes
+    mutate(dest_type = case_when(
+      attribute == "supermarket"            ~ "supermarket",
+      str_detect(dest_class, "convenience") ~ "convenience_store",
+      attribute == "restaurant"             ~ "restaurant", # OMIT
+      attribute == "cafe"                   ~ "cafe", 
+      attribute == "pharmacy"               ~ "pharmacy",
+      attribute == "post_office"            ~ "post",
+      str_detect(dest_class, "gp")          ~ "gp",
+      str_detect(dest_class, "mc_family")   ~ "maternal_child_health",
+      str_detect(dest_class, "dentist")     ~ "dentist",
+      attribute == "child care"             ~ "childcare",
+      str_detect(dest_class, "preschool")   ~ "kindergarten",
+      str_detect(dest_class, "P_12") | str_detect(dest_class, "primary") ~ "primary",
+      attribute == "community centre"       ~ "community_centre",
+      attribute == "library"                ~ "library",  # OMIT
+      !is.na(aos_id)                        ~ "park",
+      attribute == "bus"                    ~ "bus",
+      attribute == "tram"                   ~ "tram",  # OMIT
+      str_detect(dest_class, "train")       ~ "train",  # OMIT
+     )) %>%
+    filter(!dest_type %in% c("restaurant", "library", "tram", "train"))
+}
+
 # for each new destination, dwellings served / dwelling requirement
-dwel.utilisation <- intervention.destinations.with.dwellings %>%
-  left_join(dwel.reqts, by = "dest_type") %>%
-  mutate(utilisation = dwel_served / dwel_reqt)
+utilisation.new.walk <- people.served.new.walk %>%
+  left_join(pop.reqts, by = "dest_type") %>%
+  mutate(utilisation = served / pop_reqt)
+
+utilisation.new.cycle <- people.served.new.cycle %>%
+  left_join(pop.reqts, by = "dest_type") %>%
+  mutate(utilisation = served / pop_reqt)
+
+utilisation.existing.walk <- addDestType(people.served.existing.walk) %>%
+  left_join(pop.reqts, by = "dest_type") %>%
+  mutate(utilisation = served / pop_reqt)
+
+utilisation.existing.cycle <- addDestType(people.served.existing.cycle) %>%
+  left_join(pop.reqts, by = "dest_type") %>%
+  mutate(utilisation = served / pop_reqt)
 
 
 ## 3.4 Calculate average for each destination type and LGA ----
 ## ------------------------------------#
-dwel.LGA <- dwel.utilisation %>%
-  # convert polygons to centroids
-  st_centroid() %>%
-  # intersect with LGAs %>%
-  st_join(., LGAs %>% dplyr::select(NAME), .predicate = st_intersects) %>%
-  mutate(LGA = case_when(NAME == "MERRI-BEK" ~ "Merri-bek",
-                          TRUE ~ str_to_title(NAME))) %>%
-  st_drop_geometry() %>%
-  # find LGA average utilisation for each destination type
-  group_by(LGA, dest_type) %>%
-  summarise(mean_util = mean(utilisation)) %>%
-  ungroup() %>%
-  # arrange for display
-  pivot_wider(names_from = dest_type,
-              values_from = mean_util) %>%
-  # filter to the main 31 Greater Melbourne LGAs
-  filter(LGA %in% c("Banyule", "Bayside", "Boroondara", "Brimbank", "Cardinia",
-                    "Casey", "Darebin", "Frankston", "Glen Eira", "Greater Dandenong",
-                    "Hobsons Bay", "Hume", "Kingston", "Knox", "Manningham",
-                    "Maribyrnong", "Maroondah", "Melbourne", "Melton", "Merri-bek",
-                    "Monash", "Moonee Valley", "Mornington Peninsula", "Nillumbik", "Port Phillip",
-                    "Stonnington", "Whitehorse", "Whittlesea", "Wyndham", "Yarra",
-                    "Yarra Ranges")) %>%
-  # arrange output columns in desired order
-  dplyr::select(LGA, supermarket, convenience_store, cafe, pharmacy, post,
-                gp, maternal_child_health, dentist, childcare, kindergarten,
-                primary, community_centre, park, bus)
+util.LGA.new.walk <- 
+  calculateLgaUtilisationScores(utilisation.new.walk, LGAs)
+util.LGA.new.cycle <- 
+  calculateLgaUtilisationScores(utilisation.new.cycle, LGAs)
+util.LGA.existing.walk <- 
+  calculateLgaUtilisationScores(utilisation.existing.walk, LGAs)
+util.LGA.existing.cycle <- 
+  calculateLgaUtilisationScores(utilisation.existing.cycle, LGAs)
 
- 
 # write output
-write.csv(dwel.LGA, "./output/underutilisation LGA.csv", row.names = FALSE)
+# add worksheets with required names if not already there
+util.LGA.new.walk.name <- "LGA new walk"
+util.LGA.new.cycle.name <- "LGA new cycle"
+util.LGA.existing.walk.name <- "LGA existing walk"
+util.LGA.existing.cycle.name <- "LGA existing cycle"
+
+if (!util.LGA.new.walk.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.LGA.new.walk.name)
+}
+if (!util.LGA.new.cycle.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.LGA.new.cycle.name)
+}
+if (!util.LGA.existing.walk.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.LGA.existing.walk.name)
+}
+if (!util.LGA.existing.cycle.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.LGA.existing.cycle.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = util.LGA.new.walk.name, util.LGA.new.walk)
+writeData(wb, sheet = util.LGA.new.cycle.name, util.LGA.new.cycle)
+writeData(wb, sheet = util.LGA.existing.walk.name, util.LGA.existing.walk)
+writeData(wb, sheet = util.LGA.existing.cycle.name, util.LGA.existing.cycle)
+
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, underutilisation.tables.location, overwrite = TRUE)
 
 
 ## 3.5 Calculate average for each destination type and SA2 ----
 ## ------------------------------------#
-dwel.SA2 <- dwel.utilisation %>%
-  # convert polygons to centroids
-  st_centroid() %>%
-  # intersect with SA1s %>%
-  st_join(., SA2s %>% dplyr::select(SA2_MAIN16), .predicate = st_intersects) %>%
-  st_drop_geometry() %>%
-  # find SA1 average utilisation for each destination type
-  group_by(SA2_MAIN16, dest_type) %>%
-  summarise(mean_util = mean(utilisation)) %>%
-  ungroup() %>%
-  # arrange for display
-  pivot_wider(names_from = dest_type,
-              values_from = mean_util) %>%
-  
-  # unlike LGAs, don't filter at this point - will control display through
-  # using a Greater Melbourne mask
-  
-  # arrange output columns in desired order
-  dplyr::select(SA2_MAIN16, supermarket, convenience_store, cafe, pharmacy, post,
-                gp, maternal_child_health, dentist, childcare, kindergarten,
-                primary, community_centre, park, bus)
-
+util.SA2.new.walk <- 
+  calculateSA2UtilisationScores(utilisation.new.walk, SA2s)
+util.SA2.new.cycle <- 
+  calculateSA2UtilisationScores(utilisation.new.cycle, SA2s)
+util.SA2.existing.walk <- 
+  calculateSA2UtilisationScores(utilisation.existing.walk, SA2s)
+util.SA2.existing.cycle <- 
+  calculateSA2UtilisationScores(utilisation.existing.cycle, SA2s)
 
 # write output
-write.csv(dwel.SA2, "./output/underutilisation SA2.csv", row.names = FALSE)
+# add worksheets with required names if not already there
+util.SA2.new.walk.name <- "SA2 new walk"
+util.SA2.new.cycle.name <- "SA2 new cycle"
+util.SA2.existing.walk.name <- "SA2 existing walk"
+util.SA2.existing.cycle.name <- "SA2 existing cycle"
+
+if (!util.SA2.new.walk.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.SA2.new.walk.name)
+}
+if (!util.SA2.new.cycle.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.SA2.new.cycle.name)
+}
+if (!util.SA2.existing.walk.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.SA2.existing.walk.name)
+}
+if (!util.SA2.existing.cycle.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = util.SA2.existing.cycle.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = util.SA2.new.walk.name, util.SA2.new.walk)
+writeData(wb, sheet = util.SA2.new.cycle.name, util.SA2.new.cycle)
+writeData(wb, sheet = util.SA2.existing.walk.name, util.SA2.existing.walk)
+writeData(wb, sheet = util.SA2.existing.cycle.name, util.SA2.existing.cycle)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, underutilisation.tables.location, overwrite = TRUE)
+
+
+## 3.6 Calculate LGA density and compare utilisation ----
+## ------------------------------------#
+# read in ACs
+ac.catchment.addresses <- readRDS(ac.catchment.address.location)
+ac.catchment.polygons <- st_read(ac.catchment.polygon.location)
+
+# dwellings in ACs in each LGA
+LGA.ac.dwel <- residential.addresses %>%
+  # filter to all address ids comprising the ac catchments
+  filter(id %in% (ac.catchment.addresses$address_ids %>% 
+                    unlist() %>% 
+                    unique())) %>%
+  # join LGAs
+  st_join(classifyLGAs(LGAs) %>% dplyr::select(NAME, group),
+          join = st_intersects) %>%
+  # sum pop_weights for LGA to get LGA population
+  st_drop_geometry() %>%
+  group_by(NAME, group) %>%
+  summarise(dwel = sum(dwel_wt)) %>%
+  ungroup()
+  
+# area of ACs in LGAs
+LGA.ac.area <- ac.catchment.polygons %>%
+  summarise() %>%
+  # intersect with LGAs
+  st_intersection(., LGAs %>% dplyr::select(NAME)) %>%
+  # add area in hectares
+  mutate(area_ha = as.numeric(st_area(.)) / 10000) %>%
+  st_drop_geometry()
+
+# calculate density, in dwellings/ha, of AC polygons within each LGA
+LGA.density <- LGA.ac.dwel %>%
+  left_join(LGA.ac.area, by = "NAME") %>%
+  mutate(dwel_ha = dwel / area_ha)
+
+# function to read in underutilisation tables and calculate a single util score
+meanUtilScore <- function(underutilisation.tables.location, sheet.name, LGA.density) {
+  
+  output <- read.xlsx(underutilisation.tables.location, sheet = sheet.name) %>%
+           # calculate mean of the individual destination values
+           mutate(mean_util = rowMeans(select(., -c(NAME, LGA, group)), na.rm = TRUE)) %>%
+           # remove the individual destination utilisations, and join density
+           dplyr::select(NAME, LGA, group, mean_util) %>%
+           left_join(LGA.density %>% dplyr::select(NAME, dwel_ha), by = "NAME")
+  
+  return(output)
+}
+
+# read in underutilisation tables and calculate a single util score
+LGA.util.new.walk <- meanUtilScore(underutilisation.tables.location,
+                                   "LGA new walk", LGA.density)
+LGA.util.new.cycle <- meanUtilScore(underutilisation.tables.location,
+                                   "LGA new cycle", LGA.density)
+LGA.util.existing.walk <- meanUtilScore(underutilisation.tables.location,
+                                   "LGA existing walk", LGA.density)
+LGA.util.existing.cycle <- meanUtilScore(underutilisation.tables.location,
+                                   "LGA existing cycle", LGA.density)
+
+# plot density against utilisation
+utilPlot <- function(LGA.util.data) {
+  
+  # calculate regression for the model, and find the r-squared
+  lm_model <- lm(mean_util ~ dwel_ha, data = LGA.util.data)
+  r2 <- summary(lm_model)$adj.r.squared
+  
+  # Get the x- and y-coordinates for the text
+  x_text <- max(LGA.util.data$dwel_ha) * 0.9  # 90% of the maximum dwel_ha value
+  y_text <- predict(lm_model, newdata = data.frame(dwel_ha = x_text))
+  
+  util.plot <- ggplot(LGA.util.data) +
+    geom_smooth(aes(x = dwel_ha, y = mean_util), method = lm, se = FALSE,
+                linetype = "dashed", color = "black") +  
+    geom_point(aes(x = dwel_ha, y = mean_util, shape = group, fill = group), 
+               size = 3, colour = "black") +  # Set outline color to black
+    labs(x = "Density (dwellings per hectare)",
+         y = "Mean utilisation score") +
+    scale_shape_manual(values = c(21, 22, 23)) + 
+    scale_fill_manual(values = c("#1b9e77", "#7570b3", "#d95f02")) +
+    guides(fill = guide_legend(title = ""),
+           shape = guide_legend(title = "")) +
+    theme_classic() +
+    geom_text(aes(x = x_text, y = y_text, label = paste("R-squared:", round(r2, 2))),
+              hjust = 1.3, vjust = 1, size = 3, color = "black")
+  
+  return(util.plot)
+}
+
+util.plot.new.walk <- utilPlot(LGA.util.new.walk)
+util.plot.new.cycle <- utilPlot(LGA.util.new.cycle)
+util.plot.existing.walk <- utilPlot(LGA.util.existing.walk)
+util.plot.existing.cycle <- utilPlot(LGA.util.existing.cycle)
+
+ggsave("./images/util_plot_new_walk.png", util.plot.new.walk, width = 18, 
+       height = 8, units = "cm", dpi = 1000)
+ggsave("./images/util_plot_new_cycle.png", util.plot.new.cycle, width = 18, 
+       height = 8, units = "cm", dpi = 1000)
+ggsave("./images/util_plot_existing_walk.png", util.plot.existing.walk, width = 18, 
+       height = 8, units = "cm", dpi = 1000)
+ggsave("./images/util_plot_existing_cycle.png", util.plot.existing.cycle, width = 18, 
+       height = 8, units = "cm", dpi = 1000)
 
