@@ -58,6 +58,8 @@ The `baseline assessment.xlsx` file contains the following tables.
 | File               | Content                                                  |
 |--------------------|----------------------------------------------------------|
 |*intervention locations.sqlite* |Locations of the new destinations placed in and around ACs |
+|*intervention locations neediest first.sqlite* |Same, but trialling the processing of 'neediest' ACs first (and this version is also saved as the final locations) |
+|*intervention locations least needy first.sqlite* |Same, but trialling the processing of least needy ACs first |
 |*intervention locations small first.sqlite* |Same, but trialling the processing of small ACs first |
 |*intervention locations large first.sqlite* |Same, but trialling the processing of large ACs first |
 |*intervention tables.xlsx* |Tables relating to the placement of new destinations, as described below |
