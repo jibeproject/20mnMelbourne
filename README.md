@@ -13,9 +13,9 @@ There are 4 main script files.
 flowchart TD
     subgraph Workflow
         direction LR 
-        baseline.R --> a(intervention cycling speed.R)
-        baseline.R --> b(intervention destinations.R)
-        b --> analysis.R
+        baseline.R --> a(intervention destinations.R)
+        a --> analysis.R
+        intervention.cycling.speed.R
     end
     Workflow<-- imports as required ---c(functions/*.R)
 ```
