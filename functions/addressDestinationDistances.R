@@ -82,8 +82,9 @@ addressDestinationDistances <- function(destinations,
   # loop to find distances for each destination
   # ---------------------------------#
   
-  for (i in 1:length(destination.types)) {
-  # for (i in c(14:16)) {
+  # for (i in 1:length(destination.types)) {
+  for (i in c(13:length(destination.types), 1:12)) {  # park first because needs most memory!
+  # for (i in c(13:16)) {
     
     # load destinations
     # ---------------------------------#

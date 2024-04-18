@@ -9,6 +9,17 @@ There are 4 main script files.
 - `analysis.R` undertakes an accessibility analysis and an underutilisation analysis of the results of adding the additional destination locations.
 - `intervention cycling speed.R` alters the network by reducing cycling speed on residential streets.
 
+```mermaid
+flowchart TD
+    subgraph Workflow
+        direction LR 
+        baseline.R --> a(intervention cycling speed.R)
+        baseline.R --> b(intervention destinations.R)
+        b --> analysis.R
+    end
+    Workflow<-- imports as required ---c(functions/*.R)
+```
+
 # Input files
 The code requires the following input files, which are available [to authorised users] at [*insert location when known*].  The code assumes that the input files are located in a `data` directory ("../data/") which sits beside the directory in which the script files are located .
 
