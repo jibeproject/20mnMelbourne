@@ -79,9 +79,9 @@ BUFFDIST.SMALL <- 400  # distance to buffer small ACs
 BUFFDIST.MED.LARGE <- 800  # distance to buffer medium and large ACs
 
 # ordering parameter - select one
-# processing.order <- "neediest-first"
+processing.order <- "neediest-first"
 # processing.order <- "least-needy-first"
-processing.order <- "small-first"
+# processing.order <- "small-first"
 # processing.order <- "large-first"
 
 
@@ -181,7 +181,7 @@ intervention.tables.location <- "./output/intervention tables.xlsx"
 
 for (i in 1:length(destination.types)) {
 # for (i in 2:4) { 
-# for (i in c(1, 14, 13)) {
+# for (i in c(13:16)) {
   
   # set up intervention location (to write results)
   # -----------------------------------#
@@ -304,7 +304,7 @@ for (i in 1:length(destination.types)) {
       mutate(size_group = ifelse(size == "small", "small", "large"))%>%
       mutate(size_group = factor(size_group, levels = c("small", "large"))) %>%
       # small to large, then neediest
-      arrange(dessc(size_group), get(destination.field), desc(no.addresses))
+      arrange(desc(size_group), get(destination.field), desc(no.addresses))
   }  
   
   # for park (polygons), find entry nodes for baseline locations (see findEntryNodes.R for details)
@@ -442,34 +442,6 @@ for (i in 1:length(destination.types)) {
 
 ## 2.2 Assemble final locations ----
 ## -----------------------------------------------------------------------------#
-# Option if final locations are being assembled from 'small-first' and 'large-first'
-# (adapt if assembled in some other way)
-
-for (i in 1:length(destination.types)) {
-  destination.type <- destination.types[i]
-  
-  # read in the relevant layer
-  if (destination.type %in% c("convenience_store", "restaurant_cafe", "park", "bus")) {
-    if (destination.type %in% st_layers(intervention.location.small.first)$name) {
-      dest.layer <- st_read(intervention.location.small.first, layer = destination.type)
-      
-      # write to final location
-      st_write(dest.layer,
-               intervention.location.final, layer = destination.type,
-               delete_layer = TRUE)
-    }
-  }  else {
-    if (destination.type %in% st_layers(intervention.location.large.first)$name) {
-      dest.layer <- st_read(intervention.location.large.first, layer = destination.type)
-      
-      # write to final location
-      st_write(dest.layer,
-               intervention.location.final, layer = destination.type,
-               delete_layer = TRUE)
-    }
-  }
-}
-
 # Using neediest-first as final
 for (i in 1:length(destination.types)) {
   destination.type <- destination.types[i]
@@ -485,7 +457,37 @@ for (i in 1:length(destination.types)) {
   }
 }
 
-# BUT ALSO CONSIDER doing the comparison table in 3.2, then assembling the final from the lowest?
+# # Another option if final locations are being assembled from 'small-first' and 'large-first'
+# # (adapt if assembled in some other way)
+# 
+# for (i in 1:length(destination.types)) {
+#   destination.type <- destination.types[i]
+#   
+#   # read in the relevant layer
+#   if (destination.type %in% c("convenience_store", "restaurant_cafe", "park", "bus")) {
+#     if (destination.type %in% st_layers(intervention.location.small.first)$name) {
+#       dest.layer <- st_read(intervention.location.small.first, layer = destination.type)
+#       
+#       # write to final location
+#       st_write(dest.layer,
+#                intervention.location.final, layer = destination.type,
+#                delete_layer = TRUE)
+#     }
+#   }  else {
+#     if (destination.type %in% st_layers(intervention.location.large.first)$name) {
+#       dest.layer <- st_read(intervention.location.large.first, layer = destination.type)
+#       
+#       # write to final location
+#       st_write(dest.layer,
+#                intervention.location.final, layer = destination.type,
+#                delete_layer = TRUE)
+#     }
+#   }
+# }
+# 
+# # Also considered - doing the comparison table in 3.2, then assembling the final 
+# # from the lowest result for each destination type (would require some re-working
+# # of the order of 2.2 and 3)
 
 
 # 3 Output tables ----
@@ -577,10 +579,10 @@ order.comparison.table <- neediest.first.table %>%
                                        "total"))) %>%
   arrange(dest_type)
 
-##  would it be good to add a final column saying which is the lowest?  testing
+# add a final column saying which is the lowest
 for (i in 1:nrow(order.comparison.table)) {
   row <- order.comparison.table[i, ] %>% dplyr::select(-dest_type)
-  lowest.col <- colnames(row)[which.min(row[1, ])]  # not quite sure about this - do I need the 1?
+  lowest.col <- colnames(row)[which.min(row[1, ])]  
   order.comparison.table[i, "lowest"] <- lowest.col
 }
 

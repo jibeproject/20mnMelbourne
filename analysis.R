@@ -20,6 +20,7 @@ library(igraph)
 library(doSNOW)
 library(parallel)
 library(foreach)
+library(openxlsx)
 
 
 ## 1.2 Functions ----
@@ -98,7 +99,7 @@ for (i in 1:length(intervention.destinations[[1]])) {
 
 # local government areas
 LGAs <- read_zipped_GIS(zipfile = "../data/original/LGAs.zip",
-                         subpath = "/mga94_55/esrishape/whole_of_dataset/victoria/VMADMIN")
+                        subpath = "/mga94_55/esrishape/whole_of_dataset/victoria/VMADMIN")
 
 # SA2s
 SA2s <- read_zipped_GIS(zipfile = "../data/original/1270055001_sa2_2016_aust_shape.zip") %>%
@@ -158,7 +159,7 @@ if (find.accessibility.node.distances) {
   #                               multiple.destinations,
   #                               mode = "walk")
   
-
+  
   # cycle
   baseline.node.distances.cycle <-
     addressDestinationDistances(baseline.destinations,
@@ -231,7 +232,7 @@ if (find.accessibility.node.distances) {
   
   # save output
   write.csv(intervention.node.distances.cycle, "./output/node_distances_intervention_cycle.csv", row.names = FALSE)
-
+  
 }
 
 ## 2.2 Read in node distances and calculate scores ----
@@ -332,7 +333,7 @@ walk.scores <- read.xlsx(accessibility.tables.location,
                 score_single_hard_base, score_single_hard_int,
                 score_single_hard_diff, score_single_hard_rank)
 cycle.scores <- read.xlsx(accessibility.tables.location,
-                         sheet = "LGA accessibility scores cycle") %>%
+                          sheet = "LGA accessibility scores cycle") %>%
   dplyr::select(group, LGA, 
                 score_single_hard_base, score_single_hard_int,
                 score_single_hard_diff, score_single_hard_rank)
@@ -531,11 +532,11 @@ addDestType <- function(people.served) {
       attribute == "bus"                    ~ "bus",
       attribute == "tram"                   ~ "tram",  # OMIT
       str_detect(dest_class, "train")       ~ "train",  # OMIT
-     )) %>%
+    )) %>%
     filter(!dest_type %in% c("restaurant", "library", "tram", "train"))
 }
 
-# for each new destination, dwellings served / dwelling requirement
+# for each new destination, people served / population requirement
 utilisation.new.walk <- people.served.new.walk %>%
   left_join(pop.reqts, by = "dest_type") %>%
   mutate(utilisation = served / pop_reqt)
@@ -656,7 +657,7 @@ LGA.ac.dwel <- residential.addresses %>%
   group_by(NAME, group) %>%
   summarise(dwel = sum(dwel_wt)) %>%
   ungroup()
-  
+
 # area of ACs in LGAs
 LGA.ac.area <- ac.catchment.polygons %>%
   summarise() %>%
@@ -675,11 +676,11 @@ LGA.density <- LGA.ac.dwel %>%
 meanUtilScore <- function(underutilisation.tables.location, sheet.name, LGA.density) {
   
   output <- read.xlsx(underutilisation.tables.location, sheet = sheet.name) %>%
-           # calculate mean of the individual destination values
-           mutate(mean_util = rowMeans(select(., -c(NAME, LGA, group)), na.rm = TRUE)) %>%
-           # remove the individual destination utilisations, and join density
-           dplyr::select(NAME, LGA, group, mean_util) %>%
-           left_join(LGA.density %>% dplyr::select(NAME, dwel_ha), by = "NAME")
+    # calculate mean of the individual destination values
+    mutate(mean_util = rowMeans(select(., -c(NAME, LGA, group)), na.rm = TRUE)) %>%
+    # remove the individual destination utilisations, and join density
+    dplyr::select(NAME, LGA, group, mean_util) %>%
+    left_join(LGA.density %>% dplyr::select(NAME, dwel_ha), by = "NAME")
   
   return(output)
 }
@@ -688,11 +689,11 @@ meanUtilScore <- function(underutilisation.tables.location, sheet.name, LGA.dens
 LGA.util.new.walk <- meanUtilScore(underutilisation.tables.location,
                                    "LGA new walk", LGA.density)
 LGA.util.new.cycle <- meanUtilScore(underutilisation.tables.location,
-                                   "LGA new cycle", LGA.density)
+                                    "LGA new cycle", LGA.density)
 LGA.util.existing.walk <- meanUtilScore(underutilisation.tables.location,
-                                   "LGA existing walk", LGA.density)
+                                        "LGA existing walk", LGA.density)
 LGA.util.existing.cycle <- meanUtilScore(underutilisation.tables.location,
-                                   "LGA existing cycle", LGA.density)
+                                         "LGA existing cycle", LGA.density)
 
 # plot density against utilisation
 utilPlot <- function(LGA.util.data) {
