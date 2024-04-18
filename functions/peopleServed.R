@@ -7,12 +7,12 @@ peopleServed <- function(destinations,
                          PROJECT.CRS,
                          transport,
                          mode) {
-  # 
-  #   destinations = baseline.destinations
-  #   network.nodes = network.nodes.walk
-  #   network.links = network.links.walk
-  #   transport = "walk"
-  #   mode = "people"
+
+    # destinations = baseline.destinations
+    # network.nodes = network.nodes.walk
+    # network.links = network.links.walk
+    # transport = "walk"
+    # mode = "people"
   
   # set up for 'transport' and 'mode' choices
   # ---------------------------------#
@@ -122,69 +122,90 @@ peopleServed <- function(destinations,
       buffered.links <- st_buffer(network.links, 30)
     }
     
-    for (j in 1:nrow(destination)) {
-      # for (j in 1:200) {
-      # relevant location
-      location <- destination[j, ]
-      
-      # nearest node(s)
-      if (destination.types[i] == "park") {
-        from.node <- findEntryNodes("park",
-                                    location,
-                                    network.nodes,
-                                    buffered.links)
-      } else {
-        from.node <- network.nodes$id[st_nearest_feature(location, network.nodes)]
-      }
-      
-      # find distances from the destination node(s) ('from_node') to the residential nodes
-      location.distances <- distances(g,
-                                      as.character(from.node),
-                                      as.character(residential.nodes))
-      
-      # if more than one from.node (ie parks), find minimum for each residential node
-      # (that is, distance between the residential node and nearest park entry point)
-      if (nrow(location.distances) > 1) {
-        location.distances <- apply(location.distances, 2, min) %>% 
-          as.data.frame() %>%
-          t()
-      }
-      
-      # find columns within the catchment distance; the nodes are the column names 
-      catchment.nodes <- location.distances %>%
-        # transpose and make into dataframe
-        t() %>%
-        as.data.frame() %>%
-        # rename the single distance column, and add node column (former column names, now row names)
-        rename(dist = 1) %>%
-        mutate(node = as.integer(row.names(.))) %>%  
-        # filter to those within catchment distance
-        filter(dist <= catchment.dist)
-      
-      # for each catchment node, find the addresses for which it is the nearest node
-      if (transport == "walk") {
-        catchment.addresses <- residential.addresses %>%
-          filter(walk_node %in% catchment.nodes$node)
-      } else if (transport == "cycle") {
-        catchment.addresses <- residential.addresses %>%
-          filter(cycle_node %in% catchment.nodes$node)
-      }
-      
-      # catchment.addresses <- nrow(residential.addresses %>%
-      #                               filter(address.n.node %in% catchment.nodes$node))
-      # complete the 'served' column with the number of people (or dwellings), using the weight
-      destination$served[j] <- sum(catchment.addresses$unit)
-      
-      if (j %% 50 == 0) {
-        print(paste(Sys.time(), "|", destination.types[i], "- found", mode, "served by",
-                    j, "of", nrow(destination)))
-      }
-    }
     
-    # write output to temporary directory
-    saveRDS(destination, paste0("./destination catchments/dest_", destination.types[i], ".rds"))
+    # setup for parallel processing and progress reporting
+    # cores <- detectCores()
+    cores <- 4
+    cluster <- parallel::makeCluster(cores)
+    doSNOW::registerDoSNOW(cluster)
+    pb <- txtProgressBar(max = nrow(destination), style = 3)
+    progress <- function(n) setTxtProgressBar(pb, n)
+    opts <- list(progress = progress)
+    
+    # report
+    print(paste0("Finding people served by ", nrow(destination), " ", destination.types[i],
+               "(s); parallel processing with ", cores, " cores"))
+    
+    # loop to find list of boundary points
+    output <-
+      foreach(j = 1:nrow(destination),
+      # foreach(j = 1:10,
+              .combine = rbind,
+              .packages = c("dplyr", "sf", "igraph"),
+              .options.snow = opts) %dopar% {
+                
+                # relevant location
+                location <- destination[j, ]
+                
+                # nearest node(s)
+                if (destination.types[i] == "park") {
+                  from.node <- findEntryNodes("park",
+                                              location,
+                                              network.nodes,
+                                              buffered.links)
+                } else {
+                  from.node <- network.nodes$id[st_nearest_feature(location, network.nodes)]
+                }
+                
+                # find distances from the destination node(s) ('from_node') to the residential nodes
+                location.distances <- distances(g,
+                                                as.character(from.node),
+                                                as.character(residential.nodes))
+                
+                # if more than one from.node (ie parks), find minimum for each residential node
+                # (that is, distance between the residential node and nearest park entry point)
+                if (nrow(location.distances) > 1) {
+                  location.distances <- apply(location.distances, 2, min) %>% 
+                    as.data.frame() %>%
+                    t()
+                }
+                
+                # find columns within the catchment distance; the nodes are the column names 
+                catchment.nodes <- location.distances %>%
+                  # transpose and make into dataframe
+                  t() %>%
+                  as.data.frame() %>%
+                  # rename the single distance column, and add node column (former column names, now row names)
+                  rename(dist = 1) %>%
+                  mutate(node = as.integer(row.names(.))) %>%  
+                  # filter to those within catchment distance
+                  filter(dist <= catchment.dist)
+                
+                # for each catchment node, find the addresses for which it is the nearest node
+                if (transport == "walk") {
+                  catchment.addresses <- residential.addresses %>%
+                    filter(walk_node %in% catchment.nodes$node)
+                } else if (transport == "cycle") {
+                  catchment.addresses <- residential.addresses %>%
+                    filter(cycle_node %in% catchment.nodes$node)
+                }
+                
+                # complete the 'served' column with the number of people (or dwellings), using the weight
+                location$served <- sum(catchment.addresses$unit)
+ 
+                return(location)
+              }
+    
+    saveRDS(output, paste0("./destination catchments/dest_", destination.types[i], ".rds"))
+    
+    
+    # close the progress bar and cluster
+    close(pb)
+    stopCluster(cluster)
+    
   }
-  
+    
+    
   # assemble table of people (or dwellings) served for all destination types
   # ---------------------------------#
   # report progress
