@@ -20,6 +20,7 @@ library(igraph)
 library(doSNOW)
 library(parallel)
 library(foreach)
+library(openxlsx)
 
 
 ## 1.2 Functions ----
@@ -695,45 +696,86 @@ LGA.util.existing.cycle <- meanUtilScore(underutilisation.tables.location,
                                    "LGA existing cycle", LGA.density)
 
 # plot density against utilisation
-utilPlot <- function(LGA.util.data) {
+utilPlot <- function(walk.data, cycle.data) {
   
-  # calculate regression for the model, and find the r-squared
-  lm_model <- lm(mean_util ~ dwel_ha, data = LGA.util.data)
-  r2 <- summary(lm_model)$adj.r.squared
+  # calculate regression for the models, and find the r-squared
+  lm_model_walk <- lm(mean_util ~ dwel_ha, data = walk.data)
+  lm_model_cycle <- lm(mean_util ~ dwel_ha, data = cycle.data)
+  r2_walk <- summary(lm_model_walk)$adj.r.squared
+  r2_cycle <- summary(lm_model_cycle)$adj.r.squared
   
-  # Get the x- and y-coordinates for the text
-  x_text <- max(LGA.util.data$dwel_ha) * 0.9  # 90% of the maximum dwel_ha value
-  y_text <- predict(lm_model, newdata = data.frame(dwel_ha = x_text))
+  # get the x- and y-coordinates for the R-squared text
+  x_text_walk <- max(walk.data$dwel_ha) * 0.9  # a percentage of the maximum dwel_ha value
+  y_text_walk <- predict(lm_model_walk, 
+                         newdata = data.frame(dwel_ha = x_text_walk)) + 1.5
+  x_text_cycle <- max(cycle.data$dwel_ha) * 0.9  # a percentage of the maximum dwel_ha value
+  y_text_cycle <- predict(lm_model_cycle, 
+                          newdata = data.frame(dwel_ha = x_text_cycle)) + 1.2
   
-  util.plot <- ggplot(LGA.util.data) +
-    geom_smooth(aes(x = dwel_ha, y = mean_util), method = lm, se = FALSE,
+  # add columns combining group and mode
+  walk.data <- walk.data %>%
+    mutate(groupmode = paste("Walking -", group))
+  cycle.data <- cycle.data %>%
+    mutate(groupmode = paste("Cycling -", group))
+  
+  util.plot <- ggplot() +
+    # walk data
+    geom_smooth(data = walk.data,
+                aes(x = dwel_ha, y = mean_util), method = lm, se = FALSE,
                 linetype = "dashed", color = "black") +  
-    geom_point(aes(x = dwel_ha, y = mean_util, shape = group, fill = group), 
-               size = 3, colour = "black") +  # Set outline color to black
+    geom_point(data = walk.data,
+               aes(x = dwel_ha, y = mean_util, shape = groupmode, fill = groupmode), 
+               colour = "black", size = 3) +  # set outline color to black
+    # cycle data
+    geom_smooth(data = cycle.data,
+                aes(x = dwel_ha, y = mean_util), method = lm, se = FALSE,
+                linetype = "dashed", color = "black") +  
+    geom_point(data = cycle.data,
+               aes(x = dwel_ha, y = mean_util, shape = groupmode, fill = groupmode), 
+               colour = "black", size = 3) +  # set outline color to black
+    # other plot elements
     labs(x = "Density (dwellings per hectare)",
          y = "Mean utilisation score") +
-    scale_shape_manual(values = c(21, 22, 23)) + 
-    scale_fill_manual(values = c("#1b9e77", "#7570b3", "#d95f02")) +
-    guides(fill = guide_legend(title = ""),
-           shape = guide_legend(title = "")) +
+    scale_y_continuous(breaks = seq(1, ceiling(max(walk.data$dwel_ha)), by = 1)) +
+    scale_shape_manual(values = c(22, 21, 24, 22, 21, 23)) + # different shapes for outer cycling/walking, because they are close on the plot
+    scale_fill_manual(values = c("#1b9e77", "#7570b3", "#d95f02", "#1b9e77", "#7570b3", "#d95f02")) +
+    guides(fill = guide_legend(title = "Local\nGovernment\nAreas"),
+           shape = guide_legend(title = "Local\nGovernment\nAreas")) +
     theme_classic() +
-    geom_text(aes(x = x_text, y = y_text, label = paste("R-squared:", round(r2, 2))),
-              hjust = 1.3, vjust = 1, size = 3, color = "black")
-  
+    # labels for mode and r-squared
+    geom_label(aes(x = x_text_walk, y = y_text_walk,
+                   label = "Walking utilisation scores"),
+               hjust = 1, vjust = 0, size = 5, colour = "black",
+               fill = "white", alpha = 0.7) +
+    # fill = "white", alpha = 0.7, label.size = NA, label.padding = unit(0, "lines")) +  # alt with no border
+    geom_label(aes(x = x_text_cycle, y = y_text_cycle,
+                   label = "Cycling utilisation scores"),
+               hjust = 1, vjust = 0, size = 5, colour = "black", 
+               fill = "white", alpha = 0.7) +
+    # fill = "white", alpha = 0.7, label.size = NA, label.padding = unit(0, "lines")) +  # alt with no border
+    geom_label(aes(x = x_text_walk, y = y_text_walk, 
+                   label = paste("R-squared:", round(r2_walk, 2))),
+               hjust = 1, vjust = 1.5, size = 3, color = "black",
+               fill = "white", alpha = 0.7, label.size = NA,
+               label.padding = unit(0, "lines")) +
+    geom_label(aes(x = x_text_cycle, y = y_text_cycle, 
+                   label = paste("R-squared:", round(r2_cycle, 2))),
+               hjust = 1, vjust = 1.5, size = 3, color = "black",
+               fill = "white", alpha = 0.7, label.size = NA,
+               label.padding = unit(0, "lines"))
   return(util.plot)
 }
 
-util.plot.new.walk <- utilPlot(LGA.util.new.walk)
-util.plot.new.cycle <- utilPlot(LGA.util.new.cycle)
-util.plot.existing.walk <- utilPlot(LGA.util.existing.walk)
-util.plot.existing.cycle <- utilPlot(LGA.util.existing.cycle)
+util.plot.new <- utilPlot(LGA.util.new.walk, LGA.util.new.cycle)
+util.plot.existing <- utilPlot(LGA.util.existing.walk, LGA.util.existing.cycle)
 
-ggsave("./images/util_plot_new_walk.png", util.plot.new.walk, width = 18, 
-       height = 8, units = "cm", dpi = 1000)
-ggsave("./images/util_plot_new_cycle.png", util.plot.new.cycle, width = 18, 
-       height = 8, units = "cm", dpi = 1000)
-ggsave("./images/util_plot_existing_walk.png", util.plot.existing.walk, width = 18, 
-       height = 8, units = "cm", dpi = 1000)
-ggsave("./images/util_plot_existing_cycle.png", util.plot.existing.cycle, width = 18, 
-       height = 8, units = "cm", dpi = 1000)
+ggsave("./images/util_plot_new.png", util.plot.new, width = 24, 
+       height = 16, units = "cm", dpi = 1000)
+ggsave("./images/util_plot_existing.png", util.plot.existing, width = 24, 
+       height = 16, units = "cm", dpi = 1000)
 
+# details of range of new walking and cycling scores
+min(LGA.util.new.walk$mean_util)  # 0.2651838
+max(LGA.util.new.walk$mean_util)  # 1.510051
+min(LGA.util.new.cycle$mean_util)  # 1.197553
+max(LGA.util.new.cycle$mean_util)  # 9.173139

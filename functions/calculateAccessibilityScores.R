@@ -80,7 +80,7 @@ calculateAccessibilityScores <- function(distances, mode) {
   if (mode == "walk") {
     thresholds <- c(400, 600, 800)
   } else if (mode == "cycle") {
-    thresholds <- c(1250, 1875, 2500)
+    thresholds <- c(1000, 1500, 2000)
   } else {
     message(paste0("Scoring is not configured for the chosen mode '", mode, "'; terminating"))
     return(NULL)

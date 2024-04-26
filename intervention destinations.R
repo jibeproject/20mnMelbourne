@@ -506,7 +506,9 @@ if (file.exists(intervention.tables.location)) {
 # read in baseline results (no and % meeting target, and shortfall)
 baseline.table <- 
   read.xlsx(baseline.output.location, sheet = "AC coverage summ pop") %>%
-  dplyr::select(dest.dist, all.no, all.pct, all.shortfall)
+  dplyr::select(dest.dist, all.no, all.pct, all.shortfall) %>%
+  # add shortfall % column
+  mutate(shortfall.pct = 100 - all.pct)
 
 # summarise number of each new destination type
 new.location.summary <- locationSummary(intervention.location.final)
