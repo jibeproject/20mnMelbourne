@@ -92,6 +92,7 @@ The `accessibility tables.xlsx` file contains the following tables.
 |*LCA accessibility scores summ* |Walking and cycling accessibility scores, by LGA, using the main (single, binary) scoring method |
 |*SA2 accessibility scores walk* |Walking accessibility scores, summarised by SA2 |
 |*SA2 accessibility scores cycle* |Cycling accessibility scores, summarised by SA2 |
+|*people & dwelling access scores* |Accessibility scores for people and households, summarised for Greater Melbourne |
 
 
 The `underutilisation tables.xlsx` file contains the following tables.

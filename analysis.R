@@ -414,6 +414,103 @@ writeData(wb, sheet = SA2.scores.cycle.name, SA2.scores.cycle)
 saveWorkbook(wb, accessibility.tables.location, overwrite = TRUE)
 
 
+## 2.6 Percentages with access to each number of destination types ----
+## ------------------------------------#
+
+# for each destination type, percentage of people/households having access to 
+# each number of destination types
+
+# read in dwel accessibility scores
+dwel.walk.scores <- read.csv("./output/dwel accessibility scores walk.csv")
+dwel.cycle.scores <- read.csv("./output/dwel accessibility scores cycle.csv")
+
+# join addresses to scores
+address.scores <- residential.addresses %>%
+  st_drop_geometry() %>%
+  # join addresses to single hard scores
+  left_join(dwel.walk.scores %>%
+              dplyr::select(node_id, 
+                            walk_base = score_single_hard_base, 
+                            walk_int = score_single_hard_int),
+            by = c("walk_node" = "node_id")) %>%
+  left_join(dwel.cycle.scores %>%
+              dplyr::select(node_id,
+                            cycle_base = score_single_hard_base,
+                            cycle_int = score_single_hard_int),
+            by = c("cycle_node" = "node_id"))
+
+# calculate baseline and intervention percentages for walk and cycle
+baseline.walk.pct <- address.scores %>%
+  # sum the number of people/dwellings for each score
+  group_by(walk_base) %>%
+  summarise(walk_people_base = sum(pop_wt),
+            walk_dwel_base = sum(dwel_wt)) %>%
+  ungroup() %>%
+  # convert the numbers to percentages
+  mutate(walk_people_base = walk_people_base / sum(walk_people_base) * 100,
+         walk_dwel_base = walk_dwel_base / sum(walk_dwel_base) * 100) %>%
+  # rename score
+  rename(score = walk_base)
+
+intervention.walk.pct <- address.scores %>%
+  # sum the number of people/dwellings for each score
+  group_by(walk_int) %>%
+  summarise(walk_people_int = sum(pop_wt),
+            walk_dwel_int = sum(dwel_wt)) %>%
+  ungroup() %>%
+  # convert the numbers to percentages
+  mutate(walk_people_int = walk_people_int / sum(walk_people_int) * 100,
+         walk_dwel_int = walk_dwel_int / sum(walk_dwel_int) * 100) %>%
+  # rename score
+  rename(score = walk_int)
+
+baseline.cycle.pct <- address.scores %>%
+  # sum the number of people/dwellings for each score
+  group_by(cycle_base) %>%
+  summarise(cycle_people_base = sum(pop_wt),
+            cycle_dwel_base = sum(dwel_wt)) %>%
+  ungroup() %>%
+  # convert the numbers to percentages
+  mutate(cycle_people_base = cycle_people_base / sum(cycle_people_base) * 100,
+         cycle_dwel_base = cycle_dwel_base / sum(cycle_dwel_base) * 100) %>%
+  # rename score
+  rename(score = cycle_base)
+
+intervention.cycle.pct <- address.scores %>%
+  # sum the number of people/dwellings for each score
+  group_by(cycle_int) %>%
+  summarise(cycle_people_int = sum(pop_wt),
+            cycle_dwel_int = sum(dwel_wt)) %>%
+  ungroup() %>%
+  # convert the numbers to percentages
+  mutate(cycle_people_int = cycle_people_int / sum(cycle_people_int) * 100,
+         cycle_dwel_int = cycle_dwel_int / sum(cycle_dwel_int) * 100) %>%
+  # rename score
+  rename(score = cycle_int)
+
+# join the tables
+access.pct <- baseline.walk.pct %>%
+  left_join(intervention.walk.pct, by = "score") %>%
+  left_join(baseline.cycle.pct, by = "score") %>%
+  left_join(intervention.cycle.pct, by = "score") %>%
+    dplyr::select(score, walk_dwel_base, walk_dwel_int, walk_people_base, walk_people_int,
+                  cycle_dwel_base, cycle_dwel_int, cycle_people_base, cycle_people_int)
+
+# write output
+# add worksheet with required name if not already there
+access.pct.name <- "people & dwelling access scores"
+
+if (!access.pct.name %in% names(wb)) {
+  addWorksheet(wb, sheetName = access.pct.name)
+}
+
+# write the results to the worksheets
+writeData(wb, sheet = access.pct.name, access.pct)
+
+# write the workbook to  file (will create if new, or else overwrite)
+saveWorkbook(wb, accessibility.tables.location, overwrite = TRUE)
+
+
 #  3 Underutilisation analysis ----
 # -----------------------------------------------------------------------------#
 

@@ -939,3 +939,111 @@ means.overlap.dwel
 # 2 small 2-5k, small overlap  6.2 
 # 3 small <2k, large overlap   6.5 
 # 4 small <2k, small overlap   4.33
+
+
+# 7 Distance from AC investigation ----
+# -----------------------------------------------------------------------------#
+# Find proportion of Melbourne population within 800m walking distance / 2km
+# cycling distance from AC
+
+## 7.1 AC anchors ----
+## -------------------------------------#
+# code from 'makeAcCatchments.R'
+
+# ACs and supermarkets
+ACs.developed = ACs %>% filter(CENTRESIZE != "Undeveloped")
+supermarkets = st_read(POIs.location) %>% filter(Attribute == "supermarket")
+
+# buffer ACs by 30m, to catch supermarket locations placed in adjacent roads
+ACs.buffered <- ACs.developed %>%
+  st_buffer(30)
+
+supermarket.anchors <- st_intersection(ACs.buffered, supermarkets) %>%
+  dplyr::select(CENTRE_NO, size)
+
+centroid.anchors <- ACs %>%
+  # ACs that don't have supermarkets
+  filter(!CENTRE_NO %in% supermarket.anchors$CENTRE_NO) %>%
+  # centroid
+  st_centroid() %>%
+  dplyr::select(CENTRE_NO, size)
+
+anchors <- bind_rows(supermarket.anchors,
+                     centroid.anchors) %>%
+  # add nearest nodes
+  mutate(walk_node = network.nodes.walk$id[st_nearest_feature(., network.nodes.walk)],
+         cycle_node = network.nodes.cycle$id[st_nearest_feature(., network.nodes.cycle)])
+
+
+## 7.2 Distances from ACs to walking and cycling nodes ----
+## -------------------------------------#
+# code adapted from elements of 'addressDestinationDistances.R'
+
+# residential addresses
+residential.addresses <- st_read(residential.address.location)
+
+# walking and cycling graphs
+g.walk <- graph_from_data_frame(network.links.walk %>%
+                                  st_drop_geometry() %>%
+                                  mutate(weight = length) %>%
+                                  dplyr::select(from_id, to_id, id, weight), 
+                                directed = F)
+
+g.cycle <- graph_from_data_frame(network.links.cycle %>%
+                                   st_drop_geometry() %>%
+                                   mutate(weight = length) %>%
+                                   dplyr::select(from_id, to_id, id, weight), 
+                                 directed = F)
+
+# unique walking and cycling nodes
+residential.walk.nodes <- unique(residential.addresses$walk_node)
+residential.cycle.nodes <- unique(residential.addresses $cycle_node)
+
+# distances from anchors to residential nodes
+walk.distances <- distances(g.walk,
+                            as.character(anchors$walk_node),
+                            as.character(residential.walk.nodes))
+
+cycle.distances <- distances(g.cycle,
+                            as.character(anchors$cycle_node),
+                            as.character(residential.cycle.nodes))
+
+# minimum distances for each residential node (columns are resid nodes, so 2)
+min.dist.walk <- apply(walk.distances, 2, min, na.rm = TRUE) %>%  
+  as.data.frame() %>%
+  cbind(id = as.numeric(row.names(.))) %>%
+  rename(walk_dist = ".")  
+
+min.dist.cycle <- apply(cycle.distances, 2, min, na.rm = TRUE) %>%  
+  as.data.frame() %>%
+  cbind(id = as.numeric(row.names(.))) %>%
+  rename(cycle_dist = ".")  
+
+
+## 7.3 Percentage of residences within walking/cycling distances ----
+## -------------------------------------#
+# join residential addresses to the walking/cycling distances
+addresses.with.dist <- residential.addresses %>%
+  st_drop_geometry() %>%
+  left_join(min.dist.walk, by = c("walk_node" = "id")) %>%
+  left_join(min.dist.cycle, by = c("cycle_node" = "id"))
+
+chk <- addresses.with.dist %>%
+  filter(walk_dist != cycle_dist)
+
+# percentages within 800m walking / 2km cycling distance
+people <- sum(addresses.with.dist$pop_wt)
+people.within.walk.dist <- sum(addresses.with.dist %>%
+                                 filter(walk_dist <= 800) %>%
+                                 .$pop_wt)
+people.within.cycle.dist <- sum(addresses.with.dist %>%
+                                 filter(cycle_dist <= 2000) %>%
+                                 .$pop_wt)
+
+walk.pct <- people.within.walk.dist / people * 100
+cycle.pct <- people.within.cycle.dist / people * 100
+
+walk.pct  # 55.49034
+cycle.pct  # 89.32641
+> 
+
