@@ -7,7 +7,7 @@ There are 4 main script files.
 - `baseline.R` assesses the baseline status of access to destinations.
 - `intervention destination.R` identifies locations for additional community destinations in and around ACs.
 - `analysis.R` undertakes an accessibility analysis and an underutilisation analysis of the results of adding the additional destination locations.
-- `intervention cycling speed.R` alters the network by reducing cycling speed on residential streets.
+- `intervention cycling speed.R` alters the network by reducing speed limits on residential streets.
 
 # Input files
 The code requires the following input files, which are available [to authorised users] at [*insert location when known*].  The code assumes that the input files are located in a `data` directory ("../data/") which sits beside the directory in which the script files are located .
