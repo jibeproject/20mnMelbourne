@@ -340,8 +340,8 @@ cycle.scores <- read.xlsx(accessibility.tables.location,
 
 score.summary <- walk.scores %>%
   left_join(cycle.scores, by = c("group", "LGA"),
-            suffix = c("_base", "_int")) %>%
-  arrange(group, score_single_hard_rank_base)
+            suffix = c("_walk", "_cycle")) %>%
+  arrange(group, score_single_hard_rank_walk)
 
 # write output
 # add worksheet with required name if not already there
