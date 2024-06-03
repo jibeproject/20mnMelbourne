@@ -112,3 +112,5 @@ The `underutilisation tables.xlsx` file contains the following tables.
 |--------------------|----------------------------------------------------------|
 |*edgesMelbourneUpdatedSpeed.gpkg* |Road network edges with updated speeds      |
 
+# Data dictionaries
+The document *data dictionaries.xlsx* gives further information about the fields in the main output files *baseline assessment.xlsx*, *intervention locations.sqlite*, *intervention tables.xlsx*, *accessibility tables.xlsx* and *underutilisation tables.xlsx*. 
