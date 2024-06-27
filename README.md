@@ -10,7 +10,7 @@ There are 4 main script files.
 - `intervention cycling speed.R` alters the network by reducing speed limits on residential streets.
 
 # Input files
-The code requires the input data files listed in the table below.  All input files are available in our data repository at https://osf.io/54zpc/{:target="_blank"}, other than as follows:
+The code requires the input data files listed in the table below.  All input files are available in our data repository at <a href="https://osf.io/54zpc/" target="_blank"></a>, other than as follows:
 - the activity centres file *MICLUP-NACs.zip* is non-public and is not available, and
 - some parts of the baseline destinations and public open space file *ANLS 2018 - Destinations and Public Open Space.gpkg* is non-public and only a redacted version of that file is available.  
 The code assumes that the input files are located in a `data` directory ("../data/") which sits beside the directory in which the script files are located .
