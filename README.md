@@ -21,7 +21,7 @@ The code assumes that the input files are located in a `data` directory ("../dat
 |*data/original/MICLUP-NACs.zip* |Activity Centres: location of activity centres in and around which new destinations will be located |
 |*data/processed/region.sqlite* |Region: the study area where the intervention is to take place |
 |*data/processed/region_buffer.sqlite* |Region, buffered: the region, plus a buffer to limit edge effects |
-|*data/processed/edgesMelbourne.gpkg* & *data/processed/nodesMelbourne.gpkg* |Edges and nodes making up the road network |
+|*data/processed/melbourneClipped_edges.sqlite* & *data/processed/melbourneClipped_nodes.sqlite* |Edges and nodes making up the road network |
 |*data/original/VIC_ADDRESS_DEFAULT_GEOCODE_psv.psv* |Geocoded National Address File (GNAF) points for Victoria |
 |*data/original/1270055001_mb_2016_vic_shape.zip* |ABS 2016 census meshblocks for Victoria|
 |*data/original/2016 census mesh block counts.csv* |ABS 2016 census meshblocks population and dwelling counts|
@@ -105,7 +105,7 @@ The `underutilisation tables.xlsx` file contains the following tables.
 | Table              | Content                                                  |
 |--------------------|----------------------------------------------------------|
 |*LGA new walk*      |Underutilisation scores for each destination type and LGA, new destinations, walking catchments |
-|*LGA new cycle*    |Underutilisation scores for each destination type and LGA, new destinations, cycling catchments |
+|*LGA new cycle*     |Underutilisation scores for each destination type and LGA, new destinations, cycling catchments |
 |*LGA existing walk* |Underutilisation scores for each destination type and LGA, existing destinations, walking catchments |
 |*LGA existing cycle*|Underutilisation scores for each destination type and LGA, existing destinations, cycling catchments |
 |*SA2 new walk*      |Underutilisation scores for each destination type and SA2, new destinations, walking catchments |
