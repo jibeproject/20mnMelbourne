@@ -1,4 +1,4 @@
-This repository contains code for the 20 minute neighbourhood intervention.  The intervention has two components:
+This repository contains code for the JIBE 20 minute neighbourhood intervention.  The intervention has two components:
 - the destinations component, which adds community destination locations in and around defined activity centres ('ACs').
 - the cycling component, which reduces cycling speed on residential streets.
 
