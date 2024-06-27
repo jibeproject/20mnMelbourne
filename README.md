@@ -12,7 +12,8 @@ There are 4 main script files.
 # Input files
 The code requires the input data files listed in the table below.  All input files are available in our data repository at https://osf.io/54zpc/, other than as follows:
 - the activity centres file *MICLUP-NACs.zip* is non-public and is not available, and
-- some parts of the baseline destinations and public open space file *ANLS 2018 - Destinations and Public Open Space.gpkg* is non-public and only a redacted version of that file is available.  
+- some parts of the baseline destinations and public open space file *ANLS 2018 - Destinations and Public Open Space.gpkg* is non-public and only a redacted version of that file is available. 
+
 The code assumes that the input files are located in a `data` directory ("../data/") which sits beside the directory in which the script files are located .
 
 | File               | Content                                                  |
@@ -30,7 +31,9 @@ The code assumes that the input files are located in a `data` directory ("../dat
 |*data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg* |Baseline destination locations for public open space and certain other destination types |
 
 # Output files
-The code produces the output files listed in the tables below, which are saved to the `output` directory.
+The code produces the output files listed in the tables below, which are saved to the `output` directory.  These files are also available at our data repository at https://osf.io/54zpc/.
+
+The `output` directory in the data repository also contains a data dictionary, *data dictionaries.xlsx*, which contains  further information about the fields in the main output files *baseline assessment.xlsx*, *intervention locations.sqlite*, *intervention tables.xlsx*, *accessibility tables.xlsx* and *underutilisation tables.xlsx*. 
 
 #### `baseline.R`
 | File               | Content                                                  |
@@ -115,5 +118,4 @@ The `underutilisation tables.xlsx` file contains the following tables.
 |--------------------|----------------------------------------------------------|
 |*edgesMelbourneUpdatedSpeed.gpkg* |Road network edges with updated speeds      |
 
-# Data dictionaries
-The document *data dictionaries.xlsx* gives further information about the fields in the main output files *baseline assessment.xlsx*, *intervention locations.sqlite*, *intervention tables.xlsx*, *accessibility tables.xlsx* and *underutilisation tables.xlsx*. 
+
