@@ -10,7 +10,10 @@ There are 4 main script files.
 - `intervention cycling speed.R` alters the network by reducing speed limits on residential streets.
 
 # Input files
-The code requires the following input files, which are available [to authorised users] at [*insert location when known*].  The code assumes that the input files are located in a `data` directory ("../data/") which sits beside the directory in which the script files are located .
+The code requires the input data files listed in the table below.  All input files are available in our data repository at https://osf.io/54zpc/, other than as follows:
+- the activity centres file *MICLUP-NACs.zip* is non-public and is not available, and
+- some parts of the baseline destinations and public open space file *ANLS 2018 - Destinations and Public Open Space.gpkg* is non-public and only a redacted version of that file is available.  
+The code assumes that the input files are located in a `data` directory ("../data/") which sits beside the directory in which the script files are located .
 
 | File               | Content                                                  |
 |--------------------|----------------------------------------------------------|
@@ -23,11 +26,11 @@ The code requires the following input files, which are available [to authorised 
 |*data/original/2016 census mesh block counts.csv* |ABS 2016 census meshblocks population and dwelling counts|
 |*data/original/1270055001_sa2_2016_aust_shape.zip* |ABS 2016 census SA2s       |
 |*data/original/LGAs.zip* |Local government areas for Victoria                  |
-|*data/processed/Weighted POIs/poi.gpkg* |Baseline destinations locations for certain destination types |
+|*data/processed/Destination weights/Baseline/poi_weight.gpkg* |Baseline destinations locations for certain destination types |
 |*data/processed/ANLS 2018 - Destinations and Public Open Space.gpkg* |Baseline destination locations for public open space and certain other destination types |
 
 # Output files
-The code produces the following output files, which are saved to the `output` directory.
+The code produces the output files listed in the tables below, which are saved to the `output` directory.
 
 #### `baseline.R`
 | File               | Content                                                  |
