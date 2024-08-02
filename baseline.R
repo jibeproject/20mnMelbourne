@@ -796,7 +796,7 @@ scorePlot <- function(baseline.score) {
     # geom_jitter(position = position_jitter(width = 0.1), alpha = 0.2, colour = "blue") + 
     geom_boxplot() +
     labs( #title = "Distribution of scores by Activity Centre size",
-         x = "Activity Centre size (with number of centres)",
+         x = "Activity Centre population size (with number of centres)",
          y = "Score: no of destination targets met (max 14)") +
     scale_x_discrete(labels = paste0(category.counts$category, " (", category.counts$n, ")")) +
     theme_classic()
