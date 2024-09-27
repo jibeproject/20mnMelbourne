@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/732872613.svg)](https://zenodo.org/doi/10.5281/zenodo.13846250)
+
 This repository contains code for the JIBE 20 minute neighbourhood intervention.  The intervention has two components:
 - the destinations component, which adds community destination locations in and around defined activity centres ('ACs').
 - the cycling component, which reduces cycling speed on residential streets.
