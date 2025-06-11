@@ -832,7 +832,7 @@ utilPlot <- function(walk.data, cycle.data) {
                colour = "black", size = 3) +  # set outline color to black
     # other plot elements
     labs(x = "Density (dwellings per hectare)",
-         y = "Mean utilisation score") +
+         y = "Mean utilisation viability score") +
     scale_y_continuous(breaks = seq(1, ceiling(max(walk.data$dwel_ha)), by = 1)) +
     scale_shape_manual(values = c(22, 21, 24, 22, 21, 23)) + # different shapes for outer cycling/walking, because they are close on the plot
     scale_fill_manual(values = c("#1b9e77", "#7570b3", "#d95f02", "#1b9e77", "#7570b3", "#d95f02")) +
@@ -841,12 +841,12 @@ utilPlot <- function(walk.data, cycle.data) {
     theme_classic() +
     # labels for mode and r-squared
     geom_label(aes(x = x_text_walk, y = y_text_walk,
-                   label = "Walking utilisation scores"),
+                   label = "Walking utilisation viability scores"),
                hjust = 1, vjust = 0, size = 5, colour = "black",
                fill = "white", alpha = 0.7) +
     # fill = "white", alpha = 0.7, label.size = NA, label.padding = unit(0, "lines")) +  # alt with no border
     geom_label(aes(x = x_text_cycle, y = y_text_cycle,
-                   label = "Cycling utilisation scores"),
+                   label = "Cycling utilisation viability scores"),
                hjust = 1, vjust = 0, size = 5, colour = "black", 
                fill = "white", alpha = 0.7) +
     # fill = "white", alpha = 0.7, label.size = NA, label.padding = unit(0, "lines")) +  # alt with no border
