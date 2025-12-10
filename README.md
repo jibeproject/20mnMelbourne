@@ -4,6 +4,8 @@ This repository contains code for the JIBE 20 minute neighbourhood intervention.
 - the destinations component, which adds community destination locations in and around defined activity centres ('ACs').
 - the cycling component, which reduces cycling speed on residential streets.
 
+The repository also supports a paper 'Infrastructure and accessibility implications of implementing x-minute city policies in low-density contexts' which has been accepted for publication by Cities.
+
 # Overview
 There are 4 main script files.
 - `baseline.R` assesses the baseline status of access to destinations.
